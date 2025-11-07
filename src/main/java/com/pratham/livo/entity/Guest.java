@@ -1,6 +1,5 @@
 package com.pratham.livo.entity;
 
-import com.pratham.livo.entity.enums.BookingStatus;
 import com.pratham.livo.entity.enums.Gender;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
