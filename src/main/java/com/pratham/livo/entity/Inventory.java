@@ -2,6 +2,7 @@ package com.pratham.livo.entity;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
@@ -15,6 +16,7 @@ import java.time.LocalDateTime;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
+@Builder
 @Table(
         uniqueConstraints = {
                 @UniqueConstraint(name = "uniq_hotel_room_date",
@@ -25,7 +27,8 @@ import java.time.LocalDateTime;
 )
 public class Inventory {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "inv_seq")
+    @SequenceGenerator(name = "inv_seq", sequenceName = "inventory_seq")
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)

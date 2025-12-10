@@ -61,5 +61,8 @@ public class Hotel {
     private List<Inventory> inventories;
      */
 
+    @ManyToOne //M:1 mapping for hotel-user(owner)
+    private User owner;
+
 
 }

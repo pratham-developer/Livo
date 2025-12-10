@@ -1,0 +1,20 @@
+package com.pratham.livo.dto.room;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+public class RoomRequestDto {
+    private String type;
+    private BigDecimal basePrice;
+    private List<String> photos;
+    private List<String> amenities;
+    private Integer totalCount;
+    private Integer capacity;
+}
