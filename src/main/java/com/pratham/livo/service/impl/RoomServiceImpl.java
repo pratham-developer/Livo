@@ -50,6 +50,7 @@ public class RoomServiceImpl implements RoomService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<RoomResponseDto> getAllRoomsInHotel(Long hotelId) {
         log.info("Fetching all rooms for hotelId={}", hotelId);
         if(!hotelRepository.existsById(hotelId)){
@@ -62,6 +63,7 @@ public class RoomServiceImpl implements RoomService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public RoomResponseDto getRoomById(Long roomId) {
         log.info("Getting room with id: {}", roomId);
         Room room = roomRepository.findById(roomId).orElseThrow(

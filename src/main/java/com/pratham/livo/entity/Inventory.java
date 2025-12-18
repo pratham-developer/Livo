@@ -23,6 +23,17 @@ import java.time.LocalDateTime;
                 columnNames = {
                         "hotel_id","room_id","date"
                 })
+        },
+        indexes = {
+                //for searching hotels in a city b/w dates
+                @Index(name = "idx_city_date",
+                        columnList = "city, date"),
+
+                //for searching available rooms in a hotel b/w dates
+                @Index(name = "idx_hotel_date",
+                        columnList = "hotel_id, date"
+                )
+
         }
 )
 public class Inventory {
