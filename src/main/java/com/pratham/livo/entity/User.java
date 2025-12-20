@@ -2,9 +2,7 @@ package com.pratham.livo.entity;
 
 import com.pratham.livo.entity.enums.Role;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -12,10 +10,12 @@ import java.time.LocalDateTime;
 import java.util.Set;
 
 @Entity
-@Data
+@Getter
+@Setter
 @AllArgsConstructor
 @NoArgsConstructor
 @Table(name = "livo_user")
+@Builder
 public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -38,6 +38,7 @@ public class User {
     @ElementCollection(fetch = FetchType.EAGER)
     @Enumerated(value = EnumType.STRING) //stores actual name of enum as string
     //EnumType.ORDINAL stores 0,1,2 etc. instead of actual name
+    @ToString.Exclude
     private Set<Role> roles;
     //one to many mapping is done in the background
     //user_roles table will be created

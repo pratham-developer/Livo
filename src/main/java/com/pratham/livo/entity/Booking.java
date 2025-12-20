@@ -3,20 +3,21 @@ package com.pratham.livo.entity;
 
 import com.pratham.livo.entity.enums.BookingStatus;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Set;
 
 @Entity
-@Data
+@Getter
+@Setter
 @AllArgsConstructor
 @NoArgsConstructor
+@Builder
 public class Booking {
 
     @Id
@@ -25,24 +26,30 @@ public class Booking {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "hotel_id",nullable = false)
+    @ToString.Exclude
     private Hotel hotel;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "room_id",nullable = false)
+    @ToString.Exclude
     private Room room;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id",nullable = false)
+    @ToString.Exclude
     private User user;
 
     @Column(nullable = false)
     private Integer roomsCount;
 
     @Column(nullable = false)
-    private LocalDate checkinDate;
+    private LocalDate startDate;
 
     @Column(nullable = false)
-    private LocalDate checkoutDate;
+    private LocalDate endDate;
+
+    @Column(nullable = false,precision = 10,scale = 2)
+    private BigDecimal amount;
 
     @CreationTimestamp
     @Column(nullable = false,updatable = false)
@@ -56,16 +63,13 @@ public class Booking {
     @Enumerated(value = EnumType.STRING)
     private BookingStatus bookingStatus;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "payment_id")
-    private Payment payment;
-
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "booking_guest",
             joinColumns = @JoinColumn(name = "booking_id",nullable = false),
             inverseJoinColumns = @JoinColumn(name = "guest_id",nullable = false)
     )
+    @ToString.Exclude
     private Set<Guest> guests;
 
 

@@ -7,8 +7,10 @@ import com.pratham.livo.dto.hotel.HotelSearchRequestDto;
 import com.pratham.livo.dto.room.RoomResponseDto;
 import com.pratham.livo.entity.Hotel;
 import com.pratham.livo.entity.Room;
+import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.ResourceNotFoundException;
 import com.pratham.livo.projection.RoomAvailabilityWrapper;
+import com.pratham.livo.repository.BookingRepository;
 import com.pratham.livo.repository.HotelRepository;
 import com.pratham.livo.repository.InventoryRepository;
 import com.pratham.livo.repository.RoomRepository;
@@ -39,14 +41,17 @@ public class HotelServiceImpl implements HotelService {
     private final RoomRepository roomRepository;
     private final InventoryService inventoryService;
     private final InventoryRepository inventoryRepository;
+    private final BookingRepository bookingRepository;
+    private final DateValidator dateValidator;
 
     @Override
     @Transactional
     public HotelResponseDto createHotel(HotelRequestDto hotelRequestDto) {
         log.info("Creating hotel with name: {}",hotelRequestDto.getName());
         Hotel hotel = modelMapper.map(hotelRequestDto,Hotel.class);
-        //set active = false on creation
+        //set active, deleted = false on creation
         hotel.setActive(false);
+        hotel.setDeleted(false);
         Hotel savedHotel = hotelRepository.save(hotel);
         log.info("Hotel created with id: {}",savedHotel.getId());
         return modelMapper.map(savedHotel,HotelResponseDto.class);
@@ -68,6 +73,12 @@ public class HotelServiceImpl implements HotelService {
         log.info("Updating hotel with id: {}",id);
         Hotel hotel = hotelRepository.findById(id).orElseThrow(()->
                 new ResourceNotFoundException("Hotel Not Found with id: "+id));
+
+        // Prevent updates to deleted hotels
+        if(hotel.getDeleted()) {
+            throw new BadRequestException("Cannot update a deleted hotel");
+        }
+
         hotelRequestDto.setActive(hotel.getActive());
         modelMapper.map(hotelRequestDto,hotel);
         Hotel savedHotel = hotelRepository.save(hotel);
@@ -78,24 +89,27 @@ public class HotelServiceImpl implements HotelService {
     @Override
     @Transactional
     public void deleteHotelById(Long id){
-        log.info("Deleting hotel with id: {}",id);
+        log.info("Soft Deleting hotel with id: {}",id);
         Hotel hotel = hotelRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Hotel Not Found with id: "+id));
 
-        //delete inventories of this hotel
-        log.info("Deleting inventories of hotel with id: {}",id);
+        //soft delete hotel
+        hotel.setActive(false);
+        hotel.setDeleted(true);
+        hotelRepository.save(hotel);
+        log.info("Soft Deleted hotel with id: {}",id);
+
+        //soft delete rooms
+        int roomsDeleted = roomRepository.softDeleteByHotel(hotel);
+        log.info("Soft Deleted {} rooms for hotel with id: {}",roomsDeleted, id);
+
+        //hard delete inventory (remove from search)
         inventoryRepository.deleteByHotel(hotel);
-        log.info("Inventories deleted of hotel with id: {}",id);
 
-        log.info("Deleting rooms of hotel with id: {}",id);
-        roomRepository.deleteByHotel(hotel);
-        log.info("Deleted rooms of hotel with id: {}",id);
+        //kill pending bookings
+        bookingRepository.expireBookingsForHotel(hotel);
 
-        //delete hotel
-        hotelRepository.delete(hotel);
-        log.info("Hotel deleted with id: {}",id);
-
-
+        log.info("Hard Deleted inventory for hotel with id: {}",id);
     }
 
     @Override
@@ -106,19 +120,27 @@ public class HotelServiceImpl implements HotelService {
                 ()->new ResourceNotFoundException("Hotel Not Found with id: "+id)
         );
 
+        //prevent revival for a dead hotel
+        if (hotel.getDeleted()) {
+            throw new BadRequestException("Cannot activate a permanently deleted hotel.");
+        }
+
         //if already active then return
         if(hotel.getActive()) return;
 
         hotel.setActive(true);
         Hotel savedHotel = hotelRepository.save(hotel);
-        log.info("Hotel activated with id: {}",id);
 
-        //Create inventory for all the rooms of this hotel
+        //activate non deleted rooms for this hotel
+        roomRepository.activateNonDeleted(savedHotel);
 
-        List<Room> rooms = roomRepository.findByHotel(savedHotel);
+        List<Room> rooms = roomRepository.findByHotelAndDeletedFalse(savedHotel);
+        //Create inventory for all the non deleted rooms of this hotel
         for(Room room: rooms){
             inventoryService.initRoomFor1Year(room);
         }
+
+        log.info("Hotel activated with id: {}",id);
     }
 
     @Override
@@ -134,15 +156,17 @@ public class HotelServiceImpl implements HotelService {
         //not closed
         //available rooms
         log.info("Searching for hotels with request: {}",hotelSearchRequestDto);
+
+        //date validation
+        long days = dateValidator.countDays(hotelSearchRequestDto.getStartDate(),hotelSearchRequestDto.getEndDate());
+
         Pageable pageable = PageRequest.of(page,size);
         Page<Hotel> hotels = inventoryRepository.findAvailableHotels(
                 hotelSearchRequestDto.getCity(),
                 hotelSearchRequestDto.getStartDate(),
                 hotelSearchRequestDto.getEndDate(),
                 hotelSearchRequestDto.getRoomsCount(),
-                ChronoUnit.DAYS.between(
-                        hotelSearchRequestDto.getStartDate(),hotelSearchRequestDto.getEndDate()
-                )+1,
+                days,
                 pageable
         );
 
@@ -167,13 +191,16 @@ public class HotelServiceImpl implements HotelService {
         // fetch rooms of that hotel with each marked as true/false for available
         // on the basis of inventory
         if(startDate!=null && endDate!=null){
-            int targetRoomsCount = (roomsCount==null) ? roomsCount:1;
+            //date validation
+            long days = dateValidator.countDays(startDate,endDate);
+
+            Integer targetRoomsCount = (roomsCount == null) ? 1 : roomsCount;
             List<RoomAvailabilityWrapper> availabilityWrappers = inventoryRepository.findRoomsWithAvailability(
                     id,
                     startDate,
                     endDate,
-                    roomsCount,
-                    ChronoUnit.DAYS.between(startDate,endDate)+1
+                    targetRoomsCount,
+                    days
             );
 
             roomResponseDtos = availabilityWrappers.stream()
@@ -186,8 +213,10 @@ public class HotelServiceImpl implements HotelService {
         //else fetch all rooms in that hotel
         //general search by hotel
         else{
+            // Fetch all rooms, BUT filter out deleted ones
             List<Room> rooms = roomRepository.findByHotel(hotel);
             roomResponseDtos = rooms.stream()
+                    .filter(room -> !(room.getDeleted()))
                     .map(room -> {
                         RoomResponseDto dto = modelMapper.map(room,RoomResponseDto.class);
                         dto.setAvailable(true);

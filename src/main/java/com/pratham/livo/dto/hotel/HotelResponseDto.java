@@ -9,11 +9,12 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class HotelResponseDto {
+    private Long id;
     private String name;
     private String city;
     private List<String> photos;
     private List<String> amenities;
     private HotelContactInfoDto contactInfo;
-    private Long id;
     private Boolean active;
+    private Boolean deleted;
 }

@@ -7,7 +7,6 @@ import com.pratham.livo.dto.hotel.HotelSearchRequestDto;
 import org.springframework.data.web.PagedModel;
 
 import java.time.LocalDate;
-import java.util.List;
 
 public interface HotelService {
     HotelResponseDto createHotel(HotelRequestDto hotelRequestDto);

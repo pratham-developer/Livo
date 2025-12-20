@@ -4,7 +4,9 @@ import com.pratham.livo.dto.room.RoomRequestDto;
 import com.pratham.livo.dto.room.RoomResponseDto;
 import com.pratham.livo.entity.Hotel;
 import com.pratham.livo.entity.Room;
+import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.ResourceNotFoundException;
+import com.pratham.livo.repository.BookingRepository;
 import com.pratham.livo.repository.HotelRepository;
 import com.pratham.livo.repository.InventoryRepository;
 import com.pratham.livo.repository.RoomRepository;
@@ -29,6 +31,7 @@ public class RoomServiceImpl implements RoomService {
     private final HotelRepository hotelRepository;
     private final InventoryService inventoryService;
     private final InventoryRepository inventoryRepository;
+    private final BookingRepository bookingRepository;
 
     @Override
     @Transactional
@@ -37,8 +40,17 @@ public class RoomServiceImpl implements RoomService {
         Hotel hotel = hotelRepository.findById(hotelId).orElseThrow(
                 ()->new ResourceNotFoundException("Hotel Not Found with id: "+hotelId)
         );
+
+        //cant add room to a dead hotel
+        if(hotel.getDeleted()) {
+            throw new BadRequestException("Cannot add room to a deleted hotel");
+        }
+
         Room room = modelMapper.map(roomRequestDto, Room.class);
         room.setHotel(hotel);
+        room.setDeleted(false);
+        room.setActive(hotel.getActive());
+
         Room savedRoom = roomRepository.save(room);
         log.info("Room created in hotel(id={}) with type: {}",hotelId, roomRequestDto.getType());
 
@@ -58,7 +70,10 @@ public class RoomServiceImpl implements RoomService {
         }
         List<Room> rooms = roomRepository.findByHotel_Id(hotelId);
         log.info("Found {} rooms for hotelId={}", rooms.size(), hotelId);
-        return rooms.stream().map(room -> modelMapper.map(room, RoomResponseDto.class))
+
+        return rooms.stream()
+                .filter(room -> Boolean.FALSE.equals(room.getDeleted())) //dont show deleted rooms
+                .map(room -> modelMapper.map(room, RoomResponseDto.class))
                 .collect(Collectors.toList());
     }
 
@@ -76,18 +91,22 @@ public class RoomServiceImpl implements RoomService {
     @Override
     @Transactional
     public void deleteRoomById(Long roomId) {
-        log.info("Deleting room with id: {}", roomId);
+        log.info("Soft Deleting room with id: {}", roomId);
         Room room = roomRepository.findById(roomId).orElseThrow(
                 ()->new ResourceNotFoundException("Room Not Found with id: "+roomId)
         );
 
-        //delete inventories of this room
-        log.info("Deleting inventories of room with id: {}", roomId);
-        inventoryRepository.deleteByRoom(room);
-        log.info("Deleted inventories room with id: {}", roomId);
+        //soft delete room
+        room.setActive(false);
+        room.setDeleted(true);
+        roomRepository.save(room);
 
-        //delete room
-        roomRepository.delete(room);
-        log.info("Deleted room with id: {}", roomId);
+        //hard delete inventory
+        inventoryRepository.deleteByRoom(room);
+
+        //delete pending bookings
+        bookingRepository.expireBookingsForRoom(room);
+
+        log.info("Room with id = {} soft deleted and inventory cleared.", roomId);
     }
 }

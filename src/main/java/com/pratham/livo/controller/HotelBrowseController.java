@@ -3,7 +3,6 @@ package com.pratham.livo.controller;
 import com.pratham.livo.dto.hotel.HotelInfoDto;
 import com.pratham.livo.dto.hotel.HotelResponseDto;
 import com.pratham.livo.dto.hotel.HotelSearchRequestDto;
-import com.pratham.livo.entity.Hotel;
 import com.pratham.livo.service.HotelService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +29,11 @@ public class HotelBrowseController {
             @RequestParam(defaultValue = "0") Integer page,
             @RequestParam(defaultValue = "10") Integer size,
             @RequestBody HotelSearchRequestDto hotelSearchRequestDto){
+
+        //protection against dos attack
+        if (size > 100) {
+            size = 100; // Hard limit the page size
+        }
 
         log.info("Attempting to fetch hotels with request: {}",hotelSearchRequestDto);
         return ResponseEntity.ok(hotelService.searchHotels(

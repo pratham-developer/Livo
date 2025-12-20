@@ -39,7 +39,7 @@ public class HotelController  {
 
     @DeleteMapping("/{hotelId}")
     public ResponseEntity<Void> deleteHotelById(@PathVariable Long hotelId){
-        log.info("Attempting to delete hotel with id: {}",hotelId);
+        log.info("Attempting to soft delete hotel with id: {}",hotelId);
         hotelService.deleteHotelById(hotelId);
         return ResponseEntity.noContent().build();
     }

@@ -1,5 +1,7 @@
 package com.pratham.livo.advice;
 
+import com.pratham.livo.exception.BadRequestException;
+import com.pratham.livo.exception.InventoryBusyException;
 import com.pratham.livo.exception.ResourceNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +17,25 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.NOT_FOUND)
                 .message(exception.getMessage())
                 .build();
+        return buildErrorResponseEntity(apiError);
+    }
+
+    @ExceptionHandler(BadRequestException.class)
+    public ResponseEntity<ApiResponse<?>> handleBadRequest(BadRequestException exception) {
+        ApiError apiError = ApiError.builder()
+                .status(HttpStatus.BAD_REQUEST)
+                .message(exception.getMessage())
+                .build();
+        return buildErrorResponseEntity(apiError);
+    }
+
+    @ExceptionHandler(InventoryBusyException.class)
+    public ResponseEntity<ApiResponse<?>> handleInventoryBusy(InventoryBusyException exception){
+        ApiError apiError = ApiError.builder()
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .message(exception.getMessage())
+                .build();
+
         return buildErrorResponseEntity(apiError);
     }
 

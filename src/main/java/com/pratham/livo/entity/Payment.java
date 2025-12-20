@@ -2,9 +2,7 @@ package com.pratham.livo.entity;
 
 import com.pratham.livo.entity.enums.PaymentStatus;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -12,9 +10,11 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Data
+@Getter
+@Setter
 @AllArgsConstructor
 @NoArgsConstructor
+@Builder
 public class Payment {
 
     @Id
@@ -30,6 +30,10 @@ public class Payment {
 
     @Column(nullable = false,precision = 10,scale = 2)
     private BigDecimal amount;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @ToString.Exclude
+    private Booking booking;
 
     @CreationTimestamp
     @Column(updatable = false)

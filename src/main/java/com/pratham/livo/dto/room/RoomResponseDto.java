@@ -16,9 +16,10 @@ public class RoomResponseDto {
     private Long id;
     private String type;
     private BigDecimal basePrice;
+    private Boolean active;
+    private Boolean deleted;
     private List<String> photos;
     private List<String> amenities;
-    private Integer totalCount;
     private Integer capacity;
     private Boolean available;
 }

@@ -1,9 +1,7 @@
 package com.pratham.livo.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -12,9 +10,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Entity
-@Data
+@Getter
+@Setter
 @AllArgsConstructor
 @NoArgsConstructor
+@Builder
 public class Room {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -32,6 +32,7 @@ public class Room {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "hotel_id", nullable = false)
+    @ToString.Exclude
     private Hotel hotel;
     //FETCH TYPE = LAZY means that when we fetch a room we don't fetch its hotel unless we do room.getHotel()
     //in many to one by default it is EAGER, where as soon as room is fetched, its hotel is also fetched
@@ -55,6 +56,14 @@ public class Room {
     //capacity of those rooms in that hotel
     @Column(nullable = false)
     private Integer capacity;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean active = false; // Inherits from Hotel, or managed individually
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean deleted = false; // Soft Delete flag
 
     @CreationTimestamp
     @Column(updatable = false)

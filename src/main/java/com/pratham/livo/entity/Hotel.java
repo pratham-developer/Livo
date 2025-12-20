@@ -1,9 +1,7 @@
 package com.pratham.livo.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -11,9 +9,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Entity
-@Data
+@Getter
+@Setter
 @AllArgsConstructor
 @NoArgsConstructor
+@Builder
 public class Hotel {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -44,9 +44,13 @@ public class Hotel {
     @Embedded
     private HotelContactInfo contactInfo;
 
-    //for showing inactive
     @Column(nullable = false)
-    private Boolean active;
+    @Builder.Default
+    private Boolean active = false; // "Draft" vs "Live"
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean deleted = false; // "Existing" vs "Permanently Closed"
 
     //inverse side for bidirectional relationship
     //mappedBy tells jpa that, this is the inverse side, and it is not storing the foreign key
@@ -62,6 +66,7 @@ public class Hotel {
      */
 
     @ManyToOne //M:1 mapping for hotel-user(owner)
+    @ToString.Exclude
     private User owner;
 
 
