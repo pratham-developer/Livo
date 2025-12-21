@@ -29,9 +29,11 @@ import java.time.LocalDateTime;
 
                 //for searching available rooms in a hotel b/w dates
                 @Index(name = "idx_hotel_date",
-                        columnList = "hotel_id, date"
-                )
+                        columnList = "hotel_id, date"),
 
+                //for searching inventory by room and dates
+                @Index(name = "idx_room_date",
+                        columnList = "room_id, date")
         }
 )
 public class Inventory {

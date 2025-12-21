@@ -15,6 +15,11 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
+@Table(
+        indexes = {
+                @Index(name = "idx_room_hotel", columnList = "hotel_id")
+        }
+)
 public class Room {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

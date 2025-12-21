@@ -23,7 +23,8 @@ public interface BookingRepository extends JpaRepository<Booking,Long> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE Booking b
-            SET b.bookingStatus = 'EXPIRED'
+            SET b.bookingStatus = 'EXPIRED',
+                        b.version = b.version + 1
             where b.hotel = :hotel
             AND b.bookingStatus IN ('RESERVED', 'GUESTS_ADDED', 'PAYMENT_PENDING')
             """)
@@ -32,7 +33,8 @@ public interface BookingRepository extends JpaRepository<Booking,Long> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE Booking b
-            SET b.bookingStatus = 'EXPIRED'
+            SET b.bookingStatus = 'EXPIRED',
+                        b.version = b.version + 1
             where b.room = :room
             AND b.bookingStatus IN ('RESERVED', 'GUESTS_ADDED', 'PAYMENT_PENDING')
             """)

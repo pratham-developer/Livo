@@ -14,6 +14,12 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
+@Table(
+        indexes = {
+                //for searching hotel by owner id
+                @Index(name = "idx_hotel_owner", columnList = "owner_id")
+        }
+)
 public class Hotel {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

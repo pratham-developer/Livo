@@ -8,10 +8,7 @@ import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.jpa.repository.QueryHints;
+import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -20,9 +17,14 @@ import java.util.List;
 
 @Repository
 public interface InventoryRepository extends JpaRepository<Inventory,Long> {
-    void deleteByRoom(Room room);
 
-    void deleteByHotel(Hotel hotel);
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM Inventory i WHERE i.room = :room")
+    void deleteByRoom(@Param("room") Room room);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM Inventory i WHERE i.hotel = :hotel")
+    void deleteByHotel(@Param("hotel") Hotel hotel);
 
     @Query("""
             SELECT DISTINCT i.hotel FROM Inventory i
@@ -80,11 +82,6 @@ public interface InventoryRepository extends JpaRepository<Inventory,Long> {
             ORDER BY i.date ASC
     """)
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @QueryHints(
-            {
-                    @QueryHint(name = "jakarta.persistence.lock.timeout",value = "5000")
-            }
-    )
     List<Inventory> findInventoriesForRoom(
             @Param("room_id") Long roomId,
             @Param("start_date") LocalDate startDate,

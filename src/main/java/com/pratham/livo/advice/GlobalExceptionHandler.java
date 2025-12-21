@@ -39,6 +39,18 @@ public class GlobalExceptionHandler {
         return buildErrorResponseEntity(apiError);
     }
 
+    //handle optimistic locking exception
+    @ExceptionHandler(org.springframework.dao.OptimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<?>> handleOptimisticLock(Exception exception){
+        ApiError apiError = ApiError.builder()
+                .status(HttpStatus.CONFLICT)
+                .message("The resource was updated by another process. Please refresh.")
+                .build();
+        return buildErrorResponseEntity(apiError);
+    }
+
+
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<?>> handleInternalServerError(Exception exception) {
         ApiError apiError = ApiError.builder()

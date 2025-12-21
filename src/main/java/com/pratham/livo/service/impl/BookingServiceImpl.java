@@ -17,14 +17,13 @@ import org.modelmapper.ModelMapper;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -168,6 +167,7 @@ public class BookingServiceImpl implements BookingService {
     @Scheduled(cron = "0 * * * * *")
     @Transactional
     public void cleanExpiredBookings() {
+        long start = System.currentTimeMillis();
         log.info("Running Cron Job For Bookings Cleanup");
         //find threshold time = current time - 10mins
         LocalDateTime threshold = LocalDateTime.now().minusMinutes(10);
@@ -186,26 +186,32 @@ public class BookingServiceImpl implements BookingService {
         //find bookings with these status and updated before threshold time
         log.info("Fetching Expired Bookings");
         List<Booking> expiredBookings = bookingRepository.findByBookingStatusInAndUpdatedAtBefore(statusList,threshold,limit);
-        if(!expiredBookings.isEmpty()){
-            for(Booking b : expiredBookings){
-                //set status = expired
-                b.setBookingStatus(BookingStatus.EXPIRED);
-                //get inventory list relevant to the booking
-                List<Inventory> inventoryList = inventoryRepository.findByRoomAndDateBetween(b.getRoom(),b.getStartDate(),b.getEndDate());
 
-                //remove reservation from inventories
-                for(Inventory i : inventoryList){
-                    i.setReservedCount(i.getReservedCount()-b.getRoomsCount());
-                    if(i.getReservedCount() < 0){
-                        i.setReservedCount(0);
-                    }
-                }
-                //save all inventories
-                inventoryRepository.saveAll(inventoryList);
-            }
+        if (expiredBookings.isEmpty()) {
+            return;
         }
+
+        for(Booking b : expiredBookings){
+            //set status = expired
+            b.setBookingStatus(BookingStatus.EXPIRED);
+            //get inventory list relevant to the booking
+            List<Inventory> inventoryList = inventoryRepository.findByRoomAndDateBetween(b.getRoom(),b.getStartDate(),b.getEndDate());
+
+            //remove reservation from inventories
+            for(Inventory i : inventoryList){
+                i.setReservedCount(
+                        Math.max(0, i.getReservedCount() - b.getRoomsCount())
+                );
+            }
+            //save all inventories
+            inventoryRepository.saveAll(inventoryList);
+        }
+
+        //save expired bookings
         bookingRepository.saveAll(expiredBookings);
-        log.info("Successfully Cleaned Expired Bookings");
+
+        log.info("Expired booking cleanup finished in {} ms",
+                System.currentTimeMillis() - start);
     }
 
     private User getCurrentUser(){

@@ -18,6 +18,15 @@ import java.util.Set;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
+@Table(
+        indexes = {
+                //for cleaning expired bookings
+                @Index(name = "idx_booking_status_time", columnList = "bookingStatus, updatedAt"),
+                //for searching by user and booking status
+                @Index(name = "idx_booking_user_status", columnList = "user_id, bookingStatus")
+        }
+
+)
 public class Booking {
 
     @Id
@@ -72,6 +81,7 @@ public class Booking {
     @ToString.Exclude
     private Set<Guest> guests;
 
-
-
+    @Version //optimistic concurrency control b/w booking cleanup job and booking by user
+    @Column(nullable = false)
+    private Long version;
 }
