@@ -5,7 +5,6 @@ import com.pratham.livo.entity.Inventory;
 import com.pratham.livo.entity.Room;
 import com.pratham.livo.projection.RoomAvailabilityWrapper;
 import jakarta.persistence.LockModeType;
-import jakarta.persistence.QueryHint;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.*;
@@ -59,8 +58,8 @@ public interface InventoryRepository extends JpaRepository<Inventory,Long> {
                             THEN true ELSE false
                     END
                 ) FROM Room r
-                  WHERE r.hotel.id = :hotel_id 
-                  AND r.deleted = false  
+                  WHERE r.hotel.id = :hotel_id
+                  AND r.deleted = false
                   AND r.active = true
     """)
     List<RoomAvailabilityWrapper> findRoomsWithAvailability(
@@ -73,11 +72,11 @@ public interface InventoryRepository extends JpaRepository<Inventory,Long> {
 
     @Query("""
             SELECT i FROM Inventory i
-            WHERE i.room.id = :room_id 
-            AND i.room.active = true 
+            WHERE i.room.id = :room_id
+            AND i.room.active = true
             AND i.room.deleted = false
-            AND i.date BETWEEN :start_date AND :end_date 
-            AND i.closed = false 
+            AND i.date BETWEEN :start_date AND :end_date
+            AND i.closed = false
             AND (i.totalCount-i.bookedCount-i.reservedCount) >= :rooms_count
             ORDER BY i.date ASC
     """)

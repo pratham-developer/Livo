@@ -3,12 +3,15 @@ package com.pratham.livo.advice;
 import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.InventoryBusyException;
 import com.pratham.livo.exception.ResourceNotFoundException;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResourceNotFoundException.class)
@@ -40,14 +43,20 @@ public class GlobalExceptionHandler {
     }
 
     //handle optimistic locking exception
-    @ExceptionHandler(org.springframework.dao.OptimisticLockingFailureException.class)
-    public ResponseEntity<ApiResponse<?>> handleOptimisticLock(Exception exception){
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<?>> handleOptimisticLock(
+            OptimisticLockingFailureException exception) {
+
+        log.warn("Optimistic locking conflict detected: {}", exception.getMessage());
+
         ApiError apiError = ApiError.builder()
                 .status(HttpStatus.CONFLICT)
-                .message("The resource was updated by another process. Please refresh.")
+                .message("The resource was updated by another process. Please refresh and retry.")
                 .build();
+
         return buildErrorResponseEntity(apiError);
     }
+
 
 
 
