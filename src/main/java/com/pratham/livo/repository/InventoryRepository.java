@@ -88,5 +88,14 @@ public interface InventoryRepository extends JpaRepository<Inventory,Long> {
             @Param("rooms_count") Integer roomsCount
     );
 
-    List<Inventory> findByRoomAndDateBetween(Room room, LocalDate dateAfter, LocalDate dateBefore);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT i FROM Inventory i
+            WHERE i.room = :room AND
+            i.date BETWEEN :startDate AND :endDate
+            ORDER BY i.date ASC
+            """)
+    List<Inventory> findInventoriesForCleanup(@Param("room") Room room,
+                                              @Param("startDate") LocalDate startDate,
+                                              @Param("endDate") LocalDate endDate);
 }

@@ -166,51 +166,55 @@ public class BookingServiceImpl implements BookingService {
     @Scheduled(cron = "0 * * * * *")
     @Transactional
     public void cleanExpiredBookings() {
-        long start = System.currentTimeMillis();
-        log.info("Running Cron Job For Bookings Cleanup");
-        //find threshold time = current time - 10mins
-        LocalDateTime threshold = LocalDateTime.now().minusMinutes(10);
+        try {
+            long start = System.currentTimeMillis();
+            log.info("Running Cron Job For Bookings Cleanup");
+            //find threshold time = current time - 10mins
+            LocalDateTime threshold = LocalDateTime.now().minusMinutes(10);
 
-        //list of status for checking
-        List<BookingStatus> statusList = List.of(
-                BookingStatus.RESERVED,
-                BookingStatus.GUESTS_ADDED,
-                BookingStatus.PAYMENT_PENDING
-        );
+            //list of status for checking
+            List<BookingStatus> statusList = List.of(
+                    BookingStatus.RESERVED,
+                    BookingStatus.GUESTS_ADDED,
+                    BookingStatus.PAYMENT_PENDING
+            );
 
-        //implement paginated cleanup to process in batches
-        //expire 50 bookings each minute
-        Pageable limit = PageRequest.of(0,50);
+            //implement paginated cleanup to process in batches
+            //expire 50 bookings each minute
+            Pageable limit = PageRequest.of(0,50);
 
-        //find bookings with these status and updated before threshold time
-        log.info("Fetching Expired Bookings");
-        List<Booking> expiredBookings = bookingRepository.findByBookingStatusInAndUpdatedAtBefore(statusList,threshold,limit);
+            //find bookings with these status and updated before threshold time
+            log.info("Fetching Expired Bookings");
+            List<Booking> expiredBookings = bookingRepository.findByBookingStatusInAndUpdatedAtBefore(statusList,threshold,limit);
 
-        if (expiredBookings.isEmpty()) {
-            return;
-        }
-
-        for(Booking b : expiredBookings){
-            //set status = expired
-            b.setBookingStatus(BookingStatus.EXPIRED);
-            //get inventory list relevant to the booking
-            List<Inventory> inventoryList = inventoryRepository.findByRoomAndDateBetween(b.getRoom(),b.getStartDate(),b.getEndDate());
-
-            //remove reservation from inventories
-            for(Inventory i : inventoryList){
-                i.setReservedCount(
-                        Math.max(0, i.getReservedCount() - b.getRoomsCount())
-                );
+            if (expiredBookings.isEmpty()) {
+                return;
             }
-            //save all inventories
-            inventoryRepository.saveAll(inventoryList);
+
+            for(Booking b : expiredBookings){
+                //set status = expired
+                b.setBookingStatus(BookingStatus.EXPIRED);
+                //get inventory list relevant to the booking
+                List<Inventory> inventoryList = inventoryRepository.findInventoriesForCleanup(b.getRoom(),b.getStartDate(),b.getEndDate());
+
+                //remove reservation from inventories
+                for(Inventory i : inventoryList){
+                    i.setReservedCount(
+                            Math.max(0, i.getReservedCount() - b.getRoomsCount())
+                    );
+                }
+                //save all inventories
+                inventoryRepository.saveAll(inventoryList);
+            }
+
+            //save expired bookings
+            bookingRepository.saveAll(expiredBookings);
+
+            log.info("Expired booking cleanup finished in {} ms",
+                    System.currentTimeMillis() - start);
+        } catch (PessimisticLockingFailureException e) {
+            log.warn("Lock conflict during cleanup job. Skipping this batch. Will retry in 1 minute.");
         }
-
-        //save expired bookings
-        bookingRepository.saveAll(expiredBookings);
-
-        log.info("Expired booking cleanup finished in {} ms",
-                System.currentTimeMillis() - start);
     }
 
     private User getCurrentUser(){
