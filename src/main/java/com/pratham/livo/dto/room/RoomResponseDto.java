@@ -15,7 +15,7 @@ import java.util.List;
 public class RoomResponseDto {
     private Long id;
     private String type;
-    private BigDecimal basePrice;
+    private BigDecimal pricePerDay;
     private Boolean active;
     private Boolean deleted;
     private List<String> photos;

@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,5 +43,24 @@ public class InventoryServiceImpl implements InventoryService {
                     .build());
         }
         inventoryRepository.saveAll(inventoryList);
+    }
+
+    @Override
+    public BigDecimal calculateTotalAmount(List<Inventory> inventoryList) {
+        if (inventoryList == null || inventoryList.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        return inventoryList.stream()
+                .map(Inventory::getPrice)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    @Override
+    public BigDecimal calculateAveragePrice(List<Inventory> inventoryList) {
+        BigDecimal total = calculateTotalAmount(inventoryList);
+        if (total.compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ZERO;
+        }
+        return total.divide(BigDecimal.valueOf(inventoryList.size()), 2, RoundingMode.HALF_UP);
     }
 }

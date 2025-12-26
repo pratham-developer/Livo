@@ -3,6 +3,7 @@ package com.pratham.livo.repository;
 import com.pratham.livo.entity.Hotel;
 import com.pratham.livo.entity.Inventory;
 import com.pratham.livo.entity.Room;
+import com.pratham.livo.projection.PriceCheckWrapper;
 import com.pratham.livo.projection.RoomAvailabilityWrapper;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
@@ -24,6 +25,24 @@ public interface InventoryRepository extends JpaRepository<Inventory,Long> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM Inventory i WHERE i.hotel = :hotel")
     void deleteByHotel(@Param("hotel") Hotel hotel);
+
+    @Query("""
+            SELECT new com.pratham.livo.projection.PriceCheckWrapper(i.hotel.id, i.room.id, SUM(i.price), COUNT(i.price))
+            FROM Inventory i
+            WHERE i.hotel.id IN :hotel_ids
+            AND i.date BETWEEN :start_date AND :end_date
+            AND i.closed = false
+            AND (i.totalCount - i.bookedCount - i.reservedCount) >= :rooms_count
+            GROUP BY i.hotel.id, i.room.id
+            HAVING COUNT(i.date) = :date_count
+            """)
+    List<PriceCheckWrapper> findRoomAveragePrices(
+            @Param("hotel_ids") List<Long> hotelIds,
+            @Param("start_date") LocalDate startDate,
+            @Param("end_date") LocalDate endDate,
+            @Param("rooms_count") Integer roomsCount,
+            @Param("date_count") Long dateCount
+    );
 
     @Query("""
             SELECT DISTINCT i.hotel FROM Inventory i

@@ -11,6 +11,7 @@ import com.pratham.livo.exception.InventoryBusyException;
 import com.pratham.livo.exception.ResourceNotFoundException;
 import com.pratham.livo.repository.*;
 import com.pratham.livo.service.BookingService;
+import com.pratham.livo.service.InventoryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
@@ -39,6 +40,7 @@ public class BookingServiceImpl implements BookingService {
     private final GuestRepository guestRepository;
     private final ModelMapper modelMapper;
     private final DateValidator dateValidator;
+    private final InventoryService inventoryService;
 
     @Override
     @Transactional
@@ -72,6 +74,9 @@ public class BookingServiceImpl implements BookingService {
             throw new BadRequestException("Room is not available for all selected dates");
         }
 
+        //calculate amount
+        BigDecimal amount = inventoryService.calculateTotalAmount(inventoryList);
+
         //reserve rooms in the inventories
         for(Inventory i : inventoryList){
             i.setReservedCount(i.getReservedCount() + bookingRequestDto.getRoomsCount());
@@ -81,12 +86,11 @@ public class BookingServiceImpl implements BookingService {
         inventoryRepository.saveAll(inventoryList);
 
         //create booking with reserved state
-        //TODO: implement dynamic pricing strategy using decorator pattern
         Booking booking = Booking.builder()
                 .hotel(room.getHotel())
                 .room(room)
                 .user(getCurrentUser())
-                .amount(BigDecimal.TEN)
+                .amount(amount)
                 .bookingStatus(BookingStatus.RESERVED)
                 .startDate(bookingRequestDto.getStartDate())
                 .endDate(bookingRequestDto.getEndDate())

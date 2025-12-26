@@ -1,14 +1,12 @@
 package com.pratham.livo.service.impl;
 
-import com.pratham.livo.dto.hotel.HotelInfoDto;
-import com.pratham.livo.dto.hotel.HotelRequestDto;
-import com.pratham.livo.dto.hotel.HotelResponseDto;
-import com.pratham.livo.dto.hotel.HotelSearchRequestDto;
+import com.pratham.livo.dto.hotel.*;
 import com.pratham.livo.dto.room.RoomResponseDto;
 import com.pratham.livo.entity.Hotel;
 import com.pratham.livo.entity.Room;
 import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.ResourceNotFoundException;
+import com.pratham.livo.projection.PriceCheckWrapper;
 import com.pratham.livo.projection.RoomAvailabilityWrapper;
 import com.pratham.livo.repository.BookingRepository;
 import com.pratham.livo.repository.HotelRepository;
@@ -27,9 +25,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -145,7 +145,7 @@ public class HotelServiceImpl implements HotelService {
 
     @Override
     @Transactional(readOnly = true)
-    public PagedModel<HotelResponseDto> searchHotels(
+    public PagedModel<HotelSearchResponseDto> searchHotels(
             HotelSearchRequestDto hotelSearchRequestDto,
             Integer page,
             Integer size) {
@@ -160,8 +160,9 @@ public class HotelServiceImpl implements HotelService {
         //date validation
         long days = dateValidator.countDays(hotelSearchRequestDto.getStartDate(),hotelSearchRequestDto.getEndDate());
 
+        //get the page for available hotels
         Pageable pageable = PageRequest.of(page,size);
-        Page<Hotel> hotels = inventoryRepository.findAvailableHotels(
+        Page<Hotel> hotelPage = inventoryRepository.findAvailableHotels(
                 hotelSearchRequestDto.getCity(),
                 hotelSearchRequestDto.getStartDate(),
                 hotelSearchRequestDto.getEndDate(),
@@ -170,15 +171,54 @@ public class HotelServiceImpl implements HotelService {
                 pageable
         );
 
-        Page<HotelResponseDto> hotelResponseDtos = hotels.map(hotel -> modelMapper.map(hotel,HotelResponseDto.class));
+        //if no hotel, then return an empty page
+        if(hotelPage.isEmpty()){
+            return new PagedModel<>(Page.empty());
+        }
+
+        //else find the list of hotel ids
+        List<Long> hotelIds = hotelPage.stream()
+                .map(Hotel::getId)
+                .toList();
+
+        //find the list of room prices for these hotels
+        List<PriceCheckWrapper> priceCheckWrappers = inventoryRepository.findRoomAveragePrices(
+                hotelIds,
+                hotelSearchRequestDto.getStartDate(),
+                hotelSearchRequestDto.getEndDate(),
+                hotelSearchRequestDto.getRoomsCount(),
+                days
+        );
+
+        //map the hotel ids with their least prices
+        Map<Long, BigDecimal> priceMap = new HashMap<>();
+        for (PriceCheckWrapper wrapper : priceCheckWrappers) {
+            // map.merge is perfect here
+            // if Key doesn't exist -> insert New Value
+            // if Key exists -> run the function (old, new) -> old.min(new)
+            priceMap.merge(
+                    wrapper.getHotelId(),       // Key
+                    wrapper.getAvgPrice(),      // Value
+                    BigDecimal::min             // Function if collision (Pick smaller)
+            );
+        }
+
+        //return the paginated response
+        Page<HotelSearchResponseDto> responseDtoPage =
+                hotelPage.map(
+                        hotel -> {
+                            HotelSearchResponseDto dto = modelMapper.map(hotel, HotelSearchResponseDto.class);
+                            dto.setPricePerDay(priceMap.getOrDefault(hotel.getId(),BigDecimal.ZERO));
+                            return dto;
+                        }
+                );
         log.info("Hotels retrieved successfully");
-        return new PagedModel<>(hotelResponseDtos);
+        return new PagedModel<>(responseDtoPage);
     }
 
     @Override
     @Transactional(readOnly = true)
     public HotelInfoDto getHotelInfo(Long id, LocalDate startDate, LocalDate endDate, Integer roomsCount) {
-
         //find hotel first
         log.info("Fetching info for hotel with id: {}",id);
         Hotel hotel = hotelRepository.findById(id)
@@ -186,27 +226,33 @@ public class HotelServiceImpl implements HotelService {
                         new ResourceNotFoundException("Hotel Not Found with id: "+id));
         List<RoomResponseDto> roomResponseDtos;
 
-
         // if start date and end date are not null, then
         // fetch rooms of that hotel with each marked as true/false for available
         // on the basis of inventory
         if(startDate!=null && endDate!=null){
             //date validation
             long days = dateValidator.countDays(startDate,endDate);
-
             Integer targetRoomsCount = (roomsCount == null) ? 1 : roomsCount;
+
+            //find the list of available rooms
             List<RoomAvailabilityWrapper> availabilityWrappers = inventoryRepository.findRoomsWithAvailability(
-                    id,
-                    startDate,
-                    endDate,
-                    targetRoomsCount,
-                    days
-            );
+                    id, startDate, endDate, targetRoomsCount, days);
+
+            //find the list of room prices for this hotel
+            List<PriceCheckWrapper> priceCheckWrappers = inventoryRepository.findRoomAveragePrices(
+                    List.of(id), startDate, endDate, targetRoomsCount, days);
+
+            //map the room ids with their avg prices
+            Map<Long, BigDecimal> priceMap = new HashMap<>();
+            for (PriceCheckWrapper priceCheckWrapper : priceCheckWrappers) {
+                priceMap.put(priceCheckWrapper.getRoomId(),priceCheckWrapper.getAvgPrice());
+            }
 
             roomResponseDtos = availabilityWrappers.stream()
                     .map(wrapper -> {
                         RoomResponseDto dto = modelMapper.map(wrapper.getRoom(),RoomResponseDto.class);
                         dto.setAvailable(wrapper.getIsAvailable());
+                        dto.setPricePerDay(priceMap.getOrDefault(wrapper.getRoom().getId(),wrapper.getRoom().getBasePrice()));
                         return dto;
                     }).toList();
         }
@@ -220,6 +266,7 @@ public class HotelServiceImpl implements HotelService {
                     .map(room -> {
                         RoomResponseDto dto = modelMapper.map(room,RoomResponseDto.class);
                         dto.setAvailable(true);
+                        dto.setPricePerDay(null);
                         return dto;
                     })
                     .toList();

@@ -11,6 +11,8 @@ public interface BookingService {
     BookingResponseDto addGuests(Long bookingId, List<AddGuestDto> guestDtoList);
     void cleanExpiredBookings();
 
+    //TODO: implement dynamic pricing strategy using decorator pattern
+
     /*
     TODO:
     1. whenever we open the homepage, an endpoint hits to fetch the last pending booking with option to continue it
