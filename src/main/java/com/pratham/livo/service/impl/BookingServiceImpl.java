@@ -12,6 +12,7 @@ import com.pratham.livo.exception.ResourceNotFoundException;
 import com.pratham.livo.repository.*;
 import com.pratham.livo.service.BookingService;
 import com.pratham.livo.service.InventoryService;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
@@ -25,6 +26,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -43,6 +45,7 @@ public class BookingServiceImpl implements BookingService {
     private final DateValidator dateValidator;
     private final InventoryService inventoryService;
     private final TransactionTemplate transactionTemplate;
+    private final EntityManager entityManager;
 
     @Override
     @Transactional
@@ -203,12 +206,11 @@ public class BookingServiceImpl implements BookingService {
                     return 0;
                 }
 
+                List<Booking> modifiedBookings = new ArrayList<>();
+
                 // process batch of expired bookings
                 for (Booking b : expiredBookings) {
                     try {
-                        //set status as expired
-                        b.setBookingStatus(BookingStatus.EXPIRED);
-
                         //find inventory list corresponding to the booking with locks
                         List<Inventory> inventoryList = inventoryRepository.findInventoriesForCleanup(
                                 b.getRoom(), b.getStartDate(), b.getEndDate());
@@ -221,6 +223,10 @@ public class BookingServiceImpl implements BookingService {
 
                         //saving inventories
                         inventoryRepository.saveAll(inventoryList);
+
+                        // if inventory save succeeds, then change the status
+                        b.setBookingStatus(BookingStatus.EXPIRED);
+                        modifiedBookings.add(b); // Add to the list of modified bookings
                     } catch (Exception e) {
                         log.error("Error expiring booking ID: {}", b.getId(), e);
                         //catching exception to prevent rollback of the entire batch due to one booking
@@ -228,8 +234,12 @@ public class BookingServiceImpl implements BookingService {
                 }
 
                 //saving expired bookings
-                bookingRepository.saveAll(expiredBookings);
-                return expiredBookings.size();
+                bookingRepository.saveAll(modifiedBookings);
+
+                //clear memory
+                entityManager.flush();
+                entityManager.clear();
+                return modifiedBookings.size();
             });
             // transaction ends here
             // commit happens and locks are released immediately

@@ -93,11 +93,9 @@ public class HotelServiceImpl implements HotelService {
         Hotel hotel = hotelRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Hotel Not Found with id: "+id));
 
-        //soft delete hotel
-        hotel.setActive(false);
-        hotel.setDeleted(true);
-        hotelRepository.save(hotel);
-        log.info("Soft Deleted hotel with id: {}",id);
+        //kill pending bookings
+        bookingRepository.expireBookingsForHotel(hotel);
+        log.info("Expired Pending Bookings for hotel with id: {}",id);
 
         //soft delete rooms
         int roomsDeleted = roomRepository.softDeleteByHotel(hotel);
@@ -105,11 +103,13 @@ public class HotelServiceImpl implements HotelService {
 
         //hard delete inventory (remove from search)
         inventoryRepository.deleteByHotel(hotel);
-
-        //kill pending bookings
-        bookingRepository.expireBookingsForHotel(hotel);
-
         log.info("Hard Deleted inventory for hotel with id: {}",id);
+
+        //soft delete hotel
+        hotel.setActive(false);
+        hotel.setDeleted(true);
+        hotelRepository.save(hotel);
+        log.info("Soft Deleted hotel with id: {}",id);
     }
 
     @Override

@@ -117,4 +117,15 @@ public interface InventoryRepository extends JpaRepository<Inventory,Long> {
     List<Inventory> findInventoriesForCleanup(@Param("room") Room room,
                                               @Param("startDate") LocalDate startDate,
                                               @Param("endDate") LocalDate endDate);
+
+
+    @Query("""
+            SELECT i FROM Inventory i JOIN FETCH i.room WHERE
+            i.closed = false AND i.date >= :today
+            AND (i.totalCount - i.bookedCount - i.reservedCount) > 0
+            """)
+    Page<Inventory> findInventoriesForDynamicPricing(
+            @Param("today") LocalDate today,
+            Pageable pageable
+    );
 }

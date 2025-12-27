@@ -16,8 +16,6 @@ public interface RoomRepository extends JpaRepository<Room,Long> {
 
     List<Room> findByHotel(Hotel hotel);
 
-    void deleteByHotel(Hotel hotel);
-
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
     UPDATE Room r
