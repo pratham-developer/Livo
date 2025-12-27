@@ -65,10 +65,10 @@ public class Inventory {
     private Integer reservedCount;
 
     @Column(nullable = false,precision = 5,scale = 2)
-    private BigDecimal surgeFactor;
+    private BigDecimal surgeFactor; //for manual hike
 
     @Column(nullable = false,precision = 10,scale = 2)
-    private BigDecimal price; //base_price*surge_factor
+    private BigDecimal price; //calculated using dynamic pricing strategy
 
     @Column(nullable = false)
     private String city; //we are de-normalizing by storing city again to increase search speed by preventing join

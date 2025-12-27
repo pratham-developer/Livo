@@ -21,6 +21,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -41,6 +42,7 @@ public class BookingServiceImpl implements BookingService {
     private final ModelMapper modelMapper;
     private final DateValidator dateValidator;
     private final InventoryService inventoryService;
+    private final TransactionTemplate transactionTemplate;
 
     @Override
     @Transactional
@@ -166,58 +168,90 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
-    //schedule the cron job for every minute
-    @Scheduled(cron = "0 * * * * *")
-    @Transactional
+    @Scheduled(cron = "0 * * * * *") // Runs every minute
+    //no Transactional here
+    //we manage it manually inside
     public void cleanExpiredBookings() {
-        try {
-            long start = System.currentTimeMillis();
-            log.info("Running Cron Job For Bookings Cleanup");
-            //find threshold time = current time - 10mins
-            LocalDateTime threshold = LocalDateTime.now().minusMinutes(10);
+        long start = System.currentTimeMillis();
 
-            //list of status for checking
-            List<BookingStatus> statusList = List.of(
-                    BookingStatus.RESERVED,
-                    BookingStatus.GUESTS_ADDED,
-                    BookingStatus.PAYMENT_PENDING
-            );
+        //setup criteria
+        LocalDateTime threshold = LocalDateTime.now().minusMinutes(10);
+        List<BookingStatus> statusList = List.of(
+                BookingStatus.RESERVED,
+                BookingStatus.GUESTS_ADDED,
+                BookingStatus.PAYMENT_PENDING
+        );
 
-            //implement paginated cleanup to process in batches
-            //expire 50 bookings each minute
-            Pageable limit = PageRequest.of(0,50);
+        int totalProcessed = 0;
+        boolean hasMore = true;
 
-            //find bookings with these status and updated before threshold time
-            log.info("Fetching Expired Bookings");
-            List<Booking> expiredBookings = bookingRepository.findByBookingStatusInAndUpdatedAtBefore(statusList,threshold,limit);
+        log.info("Starting Booking Cleanup Job");
 
-            if (expiredBookings.isEmpty()) {
-                return;
-            }
+        //Loop for batch processing
+        while (hasMore) {
 
-            for(Booking b : expiredBookings){
-                //set status = expired
-                b.setBookingStatus(BookingStatus.EXPIRED);
-                //get inventory list relevant to the booking
-                List<Inventory> inventoryList = inventoryRepository.findInventoriesForCleanup(b.getRoom(),b.getStartDate(),b.getEndDate());
+            // batch level transaction starts here
+            // locks are acquired here
+            Integer batchCount = transactionTemplate.execute(status -> {
 
-                //remove reservation from inventories
-                for(Inventory i : inventoryList){
-                    i.setReservedCount(
-                            Math.max(0, i.getReservedCount() - b.getRoomsCount())
-                    );
+                Pageable limit = PageRequest.of(0, 50);
+                List<Booking> expiredBookings = bookingRepository.findByBookingStatusInAndUpdatedAtBefore(
+                        statusList, threshold, limit
+                );
+
+                if (expiredBookings.isEmpty()) {
+                    return 0;
                 }
-                //save all inventories
-                inventoryRepository.saveAll(inventoryList);
+
+                // process batch of expired bookings
+                for (Booking b : expiredBookings) {
+                    try {
+                        //set status as expired
+                        b.setBookingStatus(BookingStatus.EXPIRED);
+
+                        //find inventory list corresponding to the booking with locks
+                        List<Inventory> inventoryList = inventoryRepository.findInventoriesForCleanup(
+                                b.getRoom(), b.getStartDate(), b.getEndDate());
+
+                        //reset the reserved count in inventories
+                        for (Inventory i : inventoryList) {
+                            int newReserved = i.getReservedCount() - b.getRoomsCount();
+                            i.setReservedCount(Math.max(0, newReserved));
+                        }
+
+                        //saving inventories
+                        inventoryRepository.saveAll(inventoryList);
+                    } catch (Exception e) {
+                        log.error("Error expiring booking ID: {}", b.getId(), e);
+                        //catching exception to prevent rollback of the entire batch due to one booking
+                    }
+                }
+
+                //saving expired bookings
+                bookingRepository.saveAll(expiredBookings);
+                return expiredBookings.size();
+            });
+            // transaction ends here
+            // commit happens and locks are released immediately
+
+            // if no batch processed then stop loop
+            if (batchCount == null || batchCount == 0) {
+                hasMore = false;
+            } else {
+                totalProcessed += batchCount;
+                log.debug("Processed batch of {} bookings", batchCount);
             }
 
-            //save expired bookings
-            bookingRepository.saveAll(expiredBookings);
+            // limit max batch size to 2000
+            if (totalProcessed > 2000) {
+                log.warn("Cleanup Job hit safety limit (2000). Aborting until next run.");
+                break;
+            }
+        }
 
-            log.info("Expired booking cleanup finished in {} ms",
-                    System.currentTimeMillis() - start);
-        } catch (PessimisticLockingFailureException e) {
-            log.warn("Lock conflict during cleanup job. Skipping this batch. Will retry in 1 minute.");
+        if (totalProcessed > 0) {
+            log.info("Cleanup Job Finished. Total expired: {} (Time: {}ms)",
+                    totalProcessed, System.currentTimeMillis() - start);
         }
     }
 
