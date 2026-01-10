@@ -1,12 +1,12 @@
-package com.pratham.livo.service.impl;
+package com.pratham.livo.utils;
 
 import com.pratham.livo.exception.BadRequestException;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 
-@Service
+@Component
 public class DateValidator{
 
     public long countDays(LocalDate startDate, LocalDate endDate){

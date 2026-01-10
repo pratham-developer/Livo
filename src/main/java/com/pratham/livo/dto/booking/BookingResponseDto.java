@@ -1,7 +1,7 @@
 package com.pratham.livo.dto.booking;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.pratham.livo.entity.enums.BookingStatus;
+import com.pratham.livo.enums.BookingStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

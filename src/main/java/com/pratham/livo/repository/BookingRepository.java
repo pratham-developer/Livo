@@ -3,7 +3,7 @@ package com.pratham.livo.repository;
 import com.pratham.livo.entity.Booking;
 import com.pratham.livo.entity.Hotel;
 import com.pratham.livo.entity.Room;
-import com.pratham.livo.entity.enums.BookingStatus;
+import com.pratham.livo.enums.BookingStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;

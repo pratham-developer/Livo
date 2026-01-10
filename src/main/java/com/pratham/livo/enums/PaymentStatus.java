@@ -1,4 +1,4 @@
-package com.pratham.livo.entity.enums;
+package com.pratham.livo.enums;
 
 public enum PaymentStatus {
     PENDING,

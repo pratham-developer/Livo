@@ -1,6 +1,6 @@
 package com.pratham.livo.entity;
 
-import com.pratham.livo.entity.enums.PaymentStatus;
+import com.pratham.livo.enums.PaymentStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;

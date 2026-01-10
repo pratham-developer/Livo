@@ -1,6 +1,5 @@
-package com.pratham.livo.dto.booking;
+package com.pratham.livo.dto.auth;
 
-import com.pratham.livo.enums.Gender;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -8,10 +7,8 @@ import lombok.NoArgsConstructor;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class GetGuestDto {
+public class SignupResponseDto {
     private Long id;
     private String name;
-    private Integer age;
-    private Gender gender;
-    private Long userId;
+    private String email;
 }

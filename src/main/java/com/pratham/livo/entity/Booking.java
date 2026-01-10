@@ -1,7 +1,7 @@
 package com.pratham.livo.entity;
 
 
-import com.pratham.livo.entity.enums.BookingStatus;
+import com.pratham.livo.enums.BookingStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;

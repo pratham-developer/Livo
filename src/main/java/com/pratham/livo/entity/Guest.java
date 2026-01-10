@@ -1,6 +1,6 @@
 package com.pratham.livo.entity;
 
-import com.pratham.livo.entity.enums.Gender;
+import com.pratham.livo.enums.Gender;
 import jakarta.persistence.*;
 import lombok.*;
 

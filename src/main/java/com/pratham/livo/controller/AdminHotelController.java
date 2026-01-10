@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/admin/hotels")
 @AllArgsConstructor
 @Slf4j
-public class HotelController  {
+public class AdminHotelController {
 
     private final HotelService hotelService;
 
