@@ -1,21 +1,20 @@
 package com.pratham.livo.service.impl;
 
-import com.pratham.livo.dto.auth.LoginRequestDto;
-import com.pratham.livo.dto.auth.LoginResponseDto;
-import com.pratham.livo.dto.auth.SignupRequestDto;
-import com.pratham.livo.dto.auth.SignupResponseDto;
+import com.pratham.livo.dto.auth.*;
 import com.pratham.livo.entity.User;
 import com.pratham.livo.enums.Role;
 import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.SecurityRiskException;
 import com.pratham.livo.repository.UserRepository;
 import com.pratham.livo.security.JwtService;
+import com.pratham.livo.security.SecurityHelper;
 import com.pratham.livo.service.AuthService;
 import com.pratham.livo.service.SessionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationServiceException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -34,6 +33,7 @@ public class AuthServiceImpl implements AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final SessionService sessionService;
+    private final SecurityHelper securityHelper;
 
     @Override
     @Transactional
@@ -79,7 +79,16 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public void logout(String refreshToken) {
+        if(refreshToken == null || refreshToken.isEmpty()){
+            throw new BadRequestException("Refresh token cannot be null or empty");
+        }
+        AuthenticatedUser authenticatedUser = securityHelper.getCurrentAuthenticatedUser().orElseThrow(
+                ()->new AuthenticationServiceException("Cannot verify the authenticated user.")
+        );
         Long userId = jwtService.getUserIdFromRefreshToken(refreshToken);
+        if(!authenticatedUser.getId().equals(userId)){
+            throw new AuthenticationServiceException("Cannot verify the authenticated user.");
+        }
         log.info("Logging out user with id: {}",userId);
         sessionService.deleteSession(userId,refreshToken);
         log.info("Successfully logged out user with id: {}",userId);
@@ -87,6 +96,9 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public LoginResponseDto refresh(String refreshToken) {
+        if(refreshToken == null || refreshToken.isEmpty()){
+            throw new BadRequestException("Refresh token cannot be null or empty");
+        }
         Long userId = jwtService.getUserIdFromRefreshToken(refreshToken);
         log.info("Refreshing user with id: {}",userId);
         LoginResponseDto loginResponseDto = sessionService.refreshSession(userId,refreshToken);

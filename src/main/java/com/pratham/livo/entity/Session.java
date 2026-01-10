@@ -29,4 +29,7 @@ public class Session {
     @Builder.Default
     @Column(nullable = false)
     private LocalDateTime lastUsedAt = LocalDateTime.now();
+
+    @Version
+    private Long version;
 }

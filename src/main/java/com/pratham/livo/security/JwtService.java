@@ -1,5 +1,6 @@
 package com.pratham.livo.security;
 
+import com.pratham.livo.dto.auth.AccessTokenClaims;
 import com.pratham.livo.entity.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -62,12 +64,26 @@ public class JwtService {
                 .compact();
     }
 
-    public Long getUserIdFromRefreshToken(String token){
+    public Long getUserIdFromRefreshToken(String refreshToken){
         Claims claims = Jwts.parser().verifyWith(getRefreshSigningKey()).build()
-                .parseSignedClaims(token)
+                .parseSignedClaims(refreshToken)
                 .getPayload();
 
         return Long.valueOf(claims.getSubject());
+    }
+
+    public AccessTokenClaims parseAccessToken(String accessToken){
+        Claims claims = Jwts.parser().verifyWith(getAccessSigningKey()).build()
+                .parseSignedClaims(accessToken)
+                .getPayload();
+
+        return AccessTokenClaims.builder()
+                .userId(Long.valueOf(claims.getSubject()))
+                .name(claims.get("name",String.class))
+                .email(claims.get("email",String.class))
+                .roles(claims.get("roles", List.class))
+                .jti(claims.getId())
+                .build();
     }
 
 

@@ -46,9 +46,10 @@ public class SessionServiceImpl implements SessionService {
         List<Session> sessionList = sessionRepository.findByUserOrderByLastUsedAtAsc(user);
         if(sessionList.size()>=SESSION_LIMIT){
             Session toDelete = sessionList.getFirst();
-            accessTokenBlacklister.blacklist(toDelete.getJti());
+            String jti = toDelete.getJti();
             sessionRepository.delete(toDelete);
             sessionRepository.flush(); //force delete now
+            accessTokenBlacklister.blacklist(jti);
         }
 
         String refreshTokenHash = refreshTokenHasher.hash(refreshToken);
@@ -71,6 +72,7 @@ public class SessionServiceImpl implements SessionService {
         Session session = optionalSession.get();
         String jti = session.getJti();
         sessionRepository.delete(session);
+        sessionRepository.flush();
         accessTokenBlacklister.blacklist(jti);
     }
 
@@ -86,13 +88,13 @@ public class SessionServiceImpl implements SessionService {
         if(session == null){
             //possibly an attack
             List<String> jtiList = sessionRepository.findAllJti(userId);
-            accessTokenBlacklister.blacklistBatch(jtiList);
             sessionRepository.deleteAllSessionsForUser(userId);
+            accessTokenBlacklister.blacklistBatch(jtiList);
             return null;
         }
 
-        //blacklist old jti
-        accessTokenBlacklister.blacklist(session.getJti());
+        //get old jti
+        String jtiToBlacklist = session.getJti();
 
         //generate new jti
         String newJti = UUID.randomUUID().toString();
@@ -111,6 +113,10 @@ public class SessionServiceImpl implements SessionService {
 
         //save the session
         sessionRepository.save(session);
+        sessionRepository.flush();
+
+        //blacklist
+        accessTokenBlacklister.blacklist(jtiToBlacklist);
 
         //return tokens
         return LoginResponseDto.builder()
