@@ -5,11 +5,14 @@ import com.pratham.livo.dto.auth.LoginResponseDto;
 import com.pratham.livo.dto.auth.SignupRequestDto;
 import com.pratham.livo.dto.auth.SignupResponseDto;
 import com.pratham.livo.service.AuthService;
+//import com.pratham.livo.utils.EmailSender;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+//import java.util.Map;
 
 @Slf4j
 @RestController
@@ -18,11 +21,20 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    //private final EmailSender emailSender;
 
     @PostMapping("/signup")
     public ResponseEntity<SignupResponseDto> signup(@RequestBody SignupRequestDto signupRequestDto){
         log.info("Attempting to register user with email: {}",signupRequestDto.getEmail());
-        return ResponseEntity.status(HttpStatus.CREATED).body(authService.signup(signupRequestDto));
+        SignupResponseDto signupResponseDto = authService.signup(signupRequestDto);
+        /*
+        emailSender.sendEmail(
+                signupResponseDto.getEmail(),
+                "Welcome to Livo!",
+                "welcome",
+                Map.of("userName",signupResponseDto.getName())
+        );*/
+        return ResponseEntity.status(HttpStatus.CREATED).body(signupResponseDto);
     }
 
     @PostMapping("/login")
