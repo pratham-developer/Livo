@@ -14,6 +14,8 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
+import java.security.SecureRandom;
+
 import static com.pratham.livo.enums.Role.HOTEL_MANAGER;
 
 @Configuration
@@ -58,6 +60,11 @@ public class SecurityConfig {
     @Bean
     AuthenticationManager authenticationManager(AuthenticationConfiguration authenticationConfiguration) throws Exception {
         return authenticationConfiguration.getAuthenticationManager();
+    }
+
+    @Bean
+    SecureRandom secureRandom(){
+        return new SecureRandom();
     }
 
 }

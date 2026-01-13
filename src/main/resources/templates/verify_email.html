@@ -25,9 +25,9 @@
         ">Livo</h1>
     </div>
 
-    <!-- Welcome Icon Circle -->
+    <!-- Email Icon Circle -->
     <div style="text-align: center; margin-bottom: 32px;">
-        <table style="margin: 0 auto; border-collapse: collapse; border: 0;">
+        <table style="margin: 0 auto; border-collapse: collapse; border-spacing: 0; border: none;">
             <tr>
                 <td style="
                     width: 180px;
@@ -38,7 +38,8 @@
                     vertical-align: middle;
                     font-size: 80px;
                     line-height: 180px;
-                ">👋</td>
+                    padding: 0;
+                ">✉️</td>
             </tr>
         </table>
     </div>
@@ -52,8 +53,7 @@
         margin: 0 0 24px 0;
         letter-spacing: -0.5px;
     ">
-        Welcome <!--/*@thymesVar id="userName" type="java.lang.String"*/-->
-        <span th:text="${userName}">John</span>!
+        Verify your email
     </h2>
 
     <!-- Description Text -->
@@ -65,80 +65,42 @@
         margin: 0 auto 32px auto;
         max-width: 440px;
     ">
-        Your email has been successfully verified. We're excited to have you on board! Your account is now fully activated and ready to use.
+        Thanks for helping us keep your account secure! Use the code below to finish verifying your email address.
     </p>
 
-    <!-- Account Details Box -->
+    <!-- OTP Code Box -->
     <div style="
         background-color: #ffffff;
         border-radius: 12px;
         padding: 24px;
+        text-align: center;
         margin-bottom: 32px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
     ">
         <p style="
             color: #6b7280;
             font-size: 14px;
-            margin: 0 0 16px 0;
+            margin: 0 0 12px 0;
             text-transform: uppercase;
             letter-spacing: 1px;
-            text-align: center;
-        ">Your Account Details</p>
+        ">Your verification code</p>
 
         <div style="
             background-color: #faf5ff;
             border: 2px solid #7c3aed;
             border-radius: 8px;
-            padding: 20px;
+            padding: 16px;
             margin: 0 auto;
+            max-width: 280px;
         ">
-            <table style="width: 100%; border-collapse: collapse; border: 0;">
-                <tr>
-                    <td style="
-                        color: #6b7280;
-                        font-size: 14px;
-                        padding: 8px 0;
-                        font-weight: 600;
-                    ">Name:</td>
-                    <!--/*@thymesVar id="userName" type="java.lang.String"*/-->
-                    <td style="
-                        color: #1f2937;
-                        font-size: 14px;
-                        padding: 8px 0;
-                        text-align: right;
-                    " th:text="${userName}">John Doe</td>
-                </tr>
-                <tr>
-                    <td style="
-                        color: #6b7280;
-                        font-size: 14px;
-                        padding: 8px 0;
-                        font-weight: 600;
-                    ">Email:</td>
-                    <!--/*@thymesVar id="userEmail" type="java.lang.String"*/-->
-                    <td style="
-                        color: #1f2937;
-                        font-size: 14px;
-                        padding: 8px 0;
-                        text-align: right;
-                    " th:text="${userEmail}">john.doe@example.com</td>
-                </tr>
-                <tr>
-                    <td style="
-                        color: #6b7280;
-                        font-size: 14px;
-                        padding: 8px 0;
-                        font-weight: 600;
-                    ">Account Status:</td>
-                    <td style="
-                        color: #10b981;
-                        font-size: 14px;
-                        padding: 8px 0;
-                        text-align: right;
-                        font-weight: 600;
-                    ">Active</td>
-                </tr>
-            </table>
+            <p style="
+                color: #7c3aed;
+                font-size: 32px;
+                font-weight: 700;
+                letter-spacing: 8px;
+                margin: 0;
+                font-family: 'Courier New', monospace;
+            " th:text="${otp}">123456</p>
         </div>
     </div>
 
@@ -163,13 +125,7 @@
         ">
             This is an automated message. Please do not reply to this email.
         </p>
-        <p style="
-            font-size: 13px;
-            color: #9ca3af;
-            margin: 0;
-        ">
-            Need help? Contact us at <a href="mailto:support@livo.works" style="color: #7c3aed; text-decoration: none;">support@livo.works</a>
-        </p>
+
     </div>
 </div>
 </body>

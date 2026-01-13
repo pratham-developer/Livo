@@ -1,6 +1,5 @@
 package com.pratham.livo.service.impl;
 
-import brevo.ApiClient;
 import brevo.ApiException;
 import brevoApi.TransactionalEmailsApi;
 import brevoModel.SendSmtpEmail;
@@ -15,6 +14,7 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.Arrays;
 import java.util.Collections;
 
 @Service
@@ -22,7 +22,7 @@ import java.util.Collections;
 @Slf4j
 public class EmailConsumerImpl implements EmailConsumer {
 
-    private final ApiClient brevoApiClient;
+    private final TransactionalEmailsApi transactionalEmailsApi;
 
     @Value("${livo.email.from.email}")
     private String fromEmail;
@@ -45,7 +45,6 @@ public class EmailConsumerImpl implements EmailConsumer {
 
     @Override
     public void sendWithBrevo(EmailMessage emailMessage) throws ApiException {
-        TransactionalEmailsApi api = new TransactionalEmailsApi(brevoApiClient);
         SendSmtpEmail email = new SendSmtpEmail();
 
         email.setSender(new SendSmtpEmailSender().email(fromEmail).name(fromName));
@@ -54,6 +53,8 @@ public class EmailConsumerImpl implements EmailConsumer {
         email.setSubject(emailMessage.getSubject());
         email.setHtmlContent(emailMessage.getHtmlContent());
 
-        api.sendTransacEmail(email);
+        email.setTags(Arrays.asList("authentication", "security", "otp"));
+
+        transactionalEmailsApi.sendTransacEmail(email);
     }
 }

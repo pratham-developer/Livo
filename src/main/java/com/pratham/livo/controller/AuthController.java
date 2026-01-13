@@ -1,18 +1,12 @@
 package com.pratham.livo.controller;
 
-import com.pratham.livo.dto.auth.LoginRequestDto;
-import com.pratham.livo.dto.auth.LoginResponseDto;
-import com.pratham.livo.dto.auth.SignupRequestDto;
-import com.pratham.livo.dto.auth.SignupResponseDto;
+import com.pratham.livo.dto.auth.*;
 import com.pratham.livo.service.AuthService;
-//import com.pratham.livo.utils.EmailSender;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-//import java.util.Map;
 
 @Slf4j
 @RestController
@@ -21,20 +15,32 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
-    //private final EmailSender emailSender;
 
-    @PostMapping("/signup")
-    public ResponseEntity<SignupResponseDto> signup(@RequestBody SignupRequestDto signupRequestDto){
-        log.info("Attempting to register user with email: {}",signupRequestDto.getEmail());
-        SignupResponseDto signupResponseDto = authService.signup(signupRequestDto);
-        /*
-        emailSender.sendEmail(
-                signupResponseDto.getEmail(),
-                "Welcome to Livo!",
-                "welcome",
-                Map.of("userName",signupResponseDto.getName())
-        );*/
-        return ResponseEntity.status(HttpStatus.CREATED).body(signupResponseDto);
+    @PostMapping("/signup/initiate")
+    public ResponseEntity<InitiateSignupResponseDto> initiateSignup(
+            @RequestBody InitiateSignupRequestDto requestDto,
+            HttpServletRequest servletRequest
+    ){
+        log.info("Attempting to initiate signup for user with email: {}",requestDto.getEmail());
+        return ResponseEntity.ok(authService.initiateSignup(requestDto,servletRequest.getRemoteAddr()));
+    }
+
+    @PostMapping("/signup/complete")
+    public ResponseEntity<CompleteSignupResponseDto> completeSignup(
+            @RequestBody CompleteSignupRequestDto requestDto,
+            HttpServletRequest servletRequest
+    ){
+        log.info("Attempting to complete signup for user with registrationId: {}",requestDto.getRegistrationId());
+        return ResponseEntity.ok(authService.completeSignup(requestDto,servletRequest.getRemoteAddr()));
+    }
+
+    @PostMapping("/signup/resend-otp")
+    public ResponseEntity<ResendOtpResponseDto> resendOtp(
+            @RequestBody ResendOtpRequestDto requestDto,
+            HttpServletRequest servletRequest
+    ){
+        log.info("Attempting to resend otp for signing up user with registrationId: {}",requestDto.getRegistrationId());
+        return ResponseEntity.ok(authService.resendSignupOtp(requestDto,servletRequest.getRemoteAddr()));
     }
 
     @PostMapping("/login")

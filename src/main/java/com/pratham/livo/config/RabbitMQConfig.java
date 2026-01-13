@@ -26,7 +26,9 @@ public class RabbitMQConfig {
 
     @Bean
     public Queue dlqQueue(){
-        return QueueBuilder.durable(DLQ_QUEUE).build();
+        return QueueBuilder.durable(DLQ_QUEUE)
+                .withArgument("x-message-ttl", 86400000) // 24 hours ttl
+                .build();
     }
 
     @Bean
