@@ -1,5 +1,6 @@
 package com.pratham.livo.service.impl;
 
+import com.pratham.livo.dto.auth.AuthenticatedUser;
 import com.pratham.livo.dto.booking.AddGuestDto;
 import com.pratham.livo.dto.booking.BookingResponseDto;
 import com.pratham.livo.dto.booking.BookingRequestDto;
@@ -9,7 +10,9 @@ import com.pratham.livo.enums.BookingStatus;
 import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.InventoryBusyException;
 import com.pratham.livo.exception.ResourceNotFoundException;
+import com.pratham.livo.exception.SessionNotFoundException;
 import com.pratham.livo.repository.*;
+import com.pratham.livo.security.SecurityHelper;
 import com.pratham.livo.service.BookingService;
 import com.pratham.livo.service.InventoryService;
 import com.pratham.livo.utils.DateValidator;
@@ -21,6 +24,7 @@ import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -40,13 +44,13 @@ public class BookingServiceImpl implements BookingService {
     private final BookingRepository bookingRepository;
     private final RoomRepository roomRepository;
     private final InventoryRepository inventoryRepository;
-    private final UserRepository userRepository;
     private final GuestRepository guestRepository;
     private final ModelMapper modelMapper;
     private final DateValidator dateValidator;
     private final InventoryService inventoryService;
     private final TransactionTemplate transactionTemplate;
     private final EntityManager entityManager;
+    private final SecurityHelper securityHelper;
 
     @Override
     @Transactional
@@ -91,11 +95,15 @@ public class BookingServiceImpl implements BookingService {
         //save inventories
         inventoryRepository.saveAll(inventoryList);
 
+        //attach the current user
+        AuthenticatedUser authenticatedUser = currentUser();
+        User user = entityManager.getReference(User.class, authenticatedUser.getId());
+
         //create booking with reserved state
         Booking booking = Booking.builder()
                 .hotel(room.getHotel())
                 .room(room)
-                .user(getCurrentUser())
+                .user(user)
                 .amount(amount)
                 .bookingStatus(BookingStatus.RESERVED)
                 .startDate(bookingRequestDto.getStartDate())
@@ -118,6 +126,8 @@ public class BookingServiceImpl implements BookingService {
         Booking booking = bookingRepository.findById(bookingId).orElseThrow(
                 ()->new ResourceNotFoundException("Booking not found with id: "+bookingId)
         );
+
+        verifyBookingOwner(booking);
 
         //ensure booking status is valid
         if(hasExpired(booking)) throw new BadRequestException("Booking has expired");
@@ -266,11 +276,9 @@ public class BookingServiceImpl implements BookingService {
         }
     }
 
-    private User getCurrentUser(){
-        //TODO: get current logged in user using spring security
-        return userRepository.findById(1L).orElseThrow(
-                ()->new ResourceNotFoundException("User not found")
-        );
+    private AuthenticatedUser currentUser() {
+        return securityHelper.getCurrentAuthenticatedUser()
+                .orElseThrow(() -> new SessionNotFoundException("Cannot identify the authenticated user"));
     }
 
     private BookingResponseDto getBookingResponseDto(Booking savedBooking) {
@@ -286,5 +294,13 @@ public class BookingServiceImpl implements BookingService {
 
     private Boolean hasExpired(Booking booking){
         return booking.getBookingStatus() == BookingStatus.EXPIRED;
+    }
+
+    private void verifyBookingOwner(Booking booking){
+        //check if booking belongs to the authenticated user
+        AuthenticatedUser authenticatedUser = currentUser();
+        if(!authenticatedUser.getId().equals(booking.getUser().getId())){
+            throw new AccessDeniedException("Booking does not belong to the authenticated user");
+        }
     }
 }

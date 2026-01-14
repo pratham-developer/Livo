@@ -1,20 +1,25 @@
 package com.pratham.livo.service.impl;
 
+import com.pratham.livo.dto.auth.AuthenticatedUser;
 import com.pratham.livo.dto.hotel.*;
 import com.pratham.livo.dto.room.RoomResponseDto;
 import com.pratham.livo.entity.Hotel;
 import com.pratham.livo.entity.Room;
+import com.pratham.livo.entity.User;
 import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.ResourceNotFoundException;
+import com.pratham.livo.exception.SessionNotFoundException;
 import com.pratham.livo.projection.PriceCheckWrapper;
 import com.pratham.livo.projection.RoomAvailabilityWrapper;
 import com.pratham.livo.repository.BookingRepository;
 import com.pratham.livo.repository.HotelRepository;
 import com.pratham.livo.repository.InventoryRepository;
 import com.pratham.livo.repository.RoomRepository;
+import com.pratham.livo.security.SecurityHelper;
 import com.pratham.livo.service.HotelService;
 import com.pratham.livo.service.InventoryService;
 import com.pratham.livo.utils.DateValidator;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
@@ -22,6 +27,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PagedModel;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,15 +50,30 @@ public class HotelServiceImpl implements HotelService {
     private final InventoryRepository inventoryRepository;
     private final BookingRepository bookingRepository;
     private final DateValidator dateValidator;
+    private final SecurityHelper securityHelper;
+    private final EntityManager entityManager;
+    public static final int MAX_HOTELS_PER_OWNER = 10;
 
     @Override
     @Transactional
     public HotelResponseDto createHotel(HotelRequestDto hotelRequestDto) {
+        AuthenticatedUser authenticatedUser = currentUser();
+        //check if upper limit reached
+        long hotelCount = hotelRepository.countByOwnerIdAndDeletedFalse(authenticatedUser.getId());
+        if (hotelCount >= MAX_HOTELS_PER_OWNER) {
+            throw new BadRequestException("Maximum hotel limit reached");
+        }
         log.info("Creating hotel with name: {}",hotelRequestDto.getName());
         Hotel hotel = modelMapper.map(hotelRequestDto,Hotel.class);
+
+        //owner attach
+        User ownerRef = entityManager.getReference(User.class, authenticatedUser.getId());
+        hotel.setOwner(ownerRef);
+
         //set active, deleted = false on creation
         hotel.setActive(false);
         hotel.setDeleted(false);
+
         Hotel savedHotel = hotelRepository.save(hotel);
         log.info("Hotel created with id: {}",savedHotel.getId());
         return modelMapper.map(savedHotel,HotelResponseDto.class);
@@ -64,6 +85,7 @@ public class HotelServiceImpl implements HotelService {
         log.info("Getting hotel with id: {}",id);
         Hotel hotel = hotelRepository.findById(id).orElseThrow(()->
                 new ResourceNotFoundException("Hotel Not Found with id: "+id));
+        verifyHotelOwner(hotel);
         log.info("Hotel retrieved with id: {}",hotel.getId());
         return modelMapper.map(hotel, HotelResponseDto.class);
     }
@@ -74,6 +96,8 @@ public class HotelServiceImpl implements HotelService {
         log.info("Updating hotel with id: {}",id);
         Hotel hotel = hotelRepository.findById(id).orElseThrow(()->
                 new ResourceNotFoundException("Hotel Not Found with id: "+id));
+
+        verifyHotelOwner(hotel);
 
         // Prevent updates to deleted hotels
         if(hotel.getDeleted()) {
@@ -93,6 +117,8 @@ public class HotelServiceImpl implements HotelService {
         log.info("Soft Deleting hotel with id: {}",id);
         Hotel hotel = hotelRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Hotel Not Found with id: "+id));
+
+        verifyHotelOwner(hotel);
 
         //kill pending bookings
         bookingRepository.expireBookingsForHotel(hotel);
@@ -120,6 +146,8 @@ public class HotelServiceImpl implements HotelService {
         Hotel hotel = hotelRepository.findById(id).orElseThrow(
                 ()->new ResourceNotFoundException("Hotel Not Found with id: "+id)
         );
+
+        verifyHotelOwner(hotel);
 
         //prevent revival for a dead hotel
         if (hotel.getDeleted()) {
@@ -278,5 +306,19 @@ public class HotelServiceImpl implements HotelService {
                 .hotel(modelMapper.map(hotel,HotelResponseDto.class))
                 .rooms(roomResponseDtos)
                 .build();
+    }
+
+    private void verifyHotelOwner(Hotel hotel){
+        //check if hotel belongs to the authenticated user
+        AuthenticatedUser authenticatedUser = currentUser();
+
+        if(!authenticatedUser.getId().equals(hotel.getOwner().getId())){
+            throw new AccessDeniedException("Hotel does not belong to the authenticated user");
+        }
+    }
+
+    private AuthenticatedUser currentUser() {
+        return securityHelper.getCurrentAuthenticatedUser()
+                .orElseThrow(() -> new SessionNotFoundException("Cannot identify the authenticated user"));
     }
 }

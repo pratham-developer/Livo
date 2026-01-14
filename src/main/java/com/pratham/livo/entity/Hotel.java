@@ -71,7 +71,8 @@ public class Hotel {
     private List<Inventory> inventories;
      */
 
-    @ManyToOne //M:1 mapping for hotel-user(owner)
+    @ManyToOne
+    @JoinColumn(nullable = false)//M:1 mapping for hotel-user(owner)
     @ToString.Exclude
     private User owner;
 

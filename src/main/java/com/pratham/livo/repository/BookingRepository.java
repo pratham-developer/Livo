@@ -39,4 +39,6 @@ public interface BookingRepository extends JpaRepository<Booking,Long> {
             AND b.bookingStatus IN ('RESERVED', 'GUESTS_ADDED', 'PAYMENT_PENDING')
             """)
     void expireBookingsForRoom(@Param("room") Room room);
+
+
 }

@@ -12,7 +12,6 @@ import java.util.List;
 
 @Repository
 public interface RoomRepository extends JpaRepository<Room,Long> {
-    List<Room> findByHotel_Id(Long hotelId);
 
     List<Room> findByHotel(Hotel hotel);
 
@@ -37,4 +36,5 @@ public interface RoomRepository extends JpaRepository<Room,Long> {
     List<Room> findByHotelAndDeletedFalse(Hotel hotel);
 
 
+    long countByHotelIdAndDeletedFalse(Long hotelId);
 }
