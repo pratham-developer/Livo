@@ -4,12 +4,14 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.UUID;
 
 
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 public class BookingRequestDto {
+    private UUID idempotencyKey;
     private Long roomId;
     private LocalDate startDate;
     private LocalDate endDate;

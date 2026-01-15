@@ -72,12 +72,7 @@ public class Booking {
     @Enumerated(value = EnumType.STRING)
     private BookingStatus bookingStatus;
 
-    @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-            name = "booking_guest",
-            joinColumns = @JoinColumn(name = "booking_id",nullable = false),
-            inverseJoinColumns = @JoinColumn(name = "guest_id",nullable = false)
-    )
+    @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL)
     @ToString.Exclude
     private Set<Guest> guests;
 

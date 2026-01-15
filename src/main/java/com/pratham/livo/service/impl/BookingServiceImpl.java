@@ -16,6 +16,7 @@ import com.pratham.livo.security.SecurityHelper;
 import com.pratham.livo.service.BookingService;
 import com.pratham.livo.service.InventoryService;
 import com.pratham.livo.utils.DateValidator;
+import com.pratham.livo.utils.IdempotencyUtil;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -52,10 +53,24 @@ public class BookingServiceImpl implements BookingService {
     private final EntityManager entityManager;
     private final SecurityHelper securityHelper;
 
+    private final static long BOOKING_SESSION_TIME_LIMIT = 10L; //in minutes
+    private final static String KEY_PREFIX = "booking:idempotency:";
+    private final IdempotencyUtil idempotencyUtil;
+
     @Override
     @Transactional
     public BookingResponseDto initBooking(BookingRequestDto bookingRequestDto) {
         log.info("Starting booking initialization for room: {}", bookingRequestDto.getRoomId());
+
+        //check if not repeat request using idempotency key
+        if (bookingRequestDto.getIdempotencyKey() == null) {
+            throw new BadRequestException("Idempotency key is missing");
+        }
+        String idempotencyKey = bookingRequestDto.getIdempotencyKey().toString();
+        String redisKey = KEY_PREFIX + idempotencyKey;
+        if(!idempotencyUtil.acquireLock(redisKey,BOOKING_SESSION_TIME_LIMIT)){
+            throw new BadRequestException("Booking is already initiated.");
+        }
 
         //validate the dates
         long days = dateValidator.countDays(bookingRequestDto.getStartDate(),bookingRequestDto.getEndDate());
@@ -114,7 +129,7 @@ public class BookingServiceImpl implements BookingService {
         Booking savedBooking = bookingRepository.save(booking);
         log.info("Booking initialized with ID: {}", savedBooking.getId());
 
-        return getBookingResponseDto(savedBooking);
+        return getBookingResponseDto(savedBooking, idempotencyKey);
     }
 
     @Override
@@ -139,22 +154,28 @@ public class BookingServiceImpl implements BookingService {
 
         //max capacity = room capacity * number of rooms booked
         int maxCapacity = booking.getRoom().getCapacity() * booking.getRoomsCount();
-        int currentGuests = booking.getGuests() == null ? 0 : booking.getGuests().size();
 
-        if (currentGuests + guestDtoList.size() > maxCapacity) {
+        if (guestDtoList.size() > maxCapacity) {
             throw new BadRequestException("Cannot add guests. Max capacity is: " + maxCapacity);
         }
 
-        //get current guest list
-        if(booking.getGuests() == null){
+        //delete the previously added guests if any
+        if(booking.getGuests()!=null && !booking.getGuests().isEmpty()){
+            guestRepository.deleteByBookingId(bookingId);
+            booking.getGuests().clear();
+            guestRepository.flush();
+        }
+        else{
             booking.setGuests(new HashSet<>());
         }
+
         Set<Guest> guestList = booking.getGuests();
 
         //add new guests to this list
         for(AddGuestDto addGuestDto: guestDtoList){
             Guest guest = modelMapper.map(addGuestDto, Guest.class);
             guest.setUser(booking.getUser());
+            guest.setBooking(booking);
             guestList.add(guest);
         }
 
@@ -168,7 +189,7 @@ public class BookingServiceImpl implements BookingService {
         //save booking
         Booking savedBooking = bookingRepository.save(booking);
 
-        BookingResponseDto bookingResponseDto = getBookingResponseDto(savedBooking);
+        BookingResponseDto bookingResponseDto = getBookingResponseDto(savedBooking, null);
 
         Set<GetGuestDto> getGuestDtoSet = new HashSet<>();
         for(Guest guest : savedBooking.getGuests()){
@@ -189,7 +210,7 @@ public class BookingServiceImpl implements BookingService {
         long start = System.currentTimeMillis();
 
         //setup criteria
-        LocalDateTime threshold = LocalDateTime.now().minusMinutes(10);
+        LocalDateTime threshold = LocalDateTime.now().minusMinutes(BOOKING_SESSION_TIME_LIMIT);
         List<BookingStatus> statusList = List.of(
                 BookingStatus.RESERVED,
                 BookingStatus.GUESTS_ADDED,
@@ -281,7 +302,7 @@ public class BookingServiceImpl implements BookingService {
                 .orElseThrow(() -> new SessionNotFoundException("Cannot identify the authenticated user"));
     }
 
-    private BookingResponseDto getBookingResponseDto(Booking savedBooking) {
+    private BookingResponseDto getBookingResponseDto(Booking savedBooking, String idempotencyKey) {
         BookingResponseDto bookingResponseDto = modelMapper.map(savedBooking, BookingResponseDto.class);
         bookingResponseDto.setHotelId(savedBooking.getHotel().getId());
         bookingResponseDto.setRoomId(savedBooking.getRoom().getId());
@@ -289,7 +310,9 @@ public class BookingServiceImpl implements BookingService {
         bookingResponseDto.setHotelName(savedBooking.getHotel().getName());
         bookingResponseDto.setRoomType(savedBooking.getRoom().getType());
         bookingResponseDto.setHotelCity(savedBooking.getHotel().getCity());
+        bookingResponseDto.setIdempotencyKey(idempotencyKey);
         return bookingResponseDto;
+
     }
 
     private Boolean hasExpired(Booking booking){
