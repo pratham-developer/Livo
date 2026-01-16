@@ -1,4 +1,4 @@
-package com.pratham.livo.dto.auth;
+package com.pratham.livo.dto.auth.otp;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

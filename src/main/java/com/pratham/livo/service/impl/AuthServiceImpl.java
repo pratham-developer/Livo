@@ -1,7 +1,9 @@
 package com.pratham.livo.service.impl;
 
 import com.pratham.livo.dto.auth.*;
+import com.pratham.livo.dto.auth.otp.*;
 import com.pratham.livo.entity.User;
+import com.pratham.livo.enums.OtpType;
 import com.pratham.livo.enums.Role;
 import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.SecurityRiskException;
@@ -10,13 +12,11 @@ import com.pratham.livo.repository.UserRepository;
 import com.pratham.livo.security.JwtService;
 import com.pratham.livo.security.SecurityHelper;
 import com.pratham.livo.service.AuthService;
+import com.pratham.livo.service.OtpService;
 import com.pratham.livo.service.SessionService;
 import com.pratham.livo.utils.EmailSender;
-import com.pratham.livo.utils.OtpGenerator;
-import com.pratham.livo.utils.SignupSessionUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.modelmapper.ModelMapper;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationServiceException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -27,7 +27,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -35,19 +34,15 @@ import java.util.UUID;
 public class AuthServiceImpl implements AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final ModelMapper modelMapper;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final SessionService sessionService;
     private final SecurityHelper securityHelper;
-    private final OtpGenerator otpGenerator;
-    private final SignupSessionUtil signupSessionUtil;
     private final EmailSender emailSender;
+    private final OtpService otpService;
 
-    private static final int MAX_LIMIT = 3;
-    private static final long TIME_LIMIT = 60000; //one minute
-    //max time to complete the entire flow
-    private static final long ABSOLUTE_SESSION_LIMIT = 1200000; //20 minutes
+    private static final String PAYLOAD_NAME = "name";
+    private static final String PAYLOAD_PWD_HASH = "passwordHash";
 
     @Override
     @Transactional
@@ -107,116 +102,61 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public InitiateSignupResponseDto initiateSignup(InitiateSignupRequestDto requestDto, String ipAddress) {
+    public InitiateOtpResponseDto initiateSignup(SignupRequestDto requestDto, String ipAddress) {
         log.info("Initiating signup with email: {}",requestDto.getEmail());
-        //if user exists with this email, throw bad request
-        if(userRepository.existsByEmail(requestDto.getEmail())){
+        if (userRepository.existsByEmail(requestDto.getEmail())) {
             throw new BadRequestException("An account already exists with this email.");
         }
-
-        //generate signup session
-        String registrationId = UUID.randomUUID().toString(); //reg id for ensuring same device
-        String otp = otpGenerator.generate(); //otp for verification
-
-        //generate signup session
-        SignupSession signupSession = SignupSession.builder()
-                .name(requestDto.getName())
-                .email(requestDto.getEmail())
-                .passwordHash(passwordEncoder.encode(requestDto.getPassword()))
-                .otpHash(passwordEncoder.encode(otp))
-                .ipAddress(ipAddress)
-                .attempts(0)
-                .resendCount(0)
-                .lastResendAt(System.currentTimeMillis())
-                .sessionCreatedAt(System.currentTimeMillis())
-                .build();
-
-        //push session to redis
-        signupSessionUtil.pushToRedis(registrationId,signupSession);
+        //create otp session
+        OtpHelperDto otpHelperDto = otpService.createOtpSession(
+                requestDto.getEmail(),ipAddress,
+                OtpType.SIGNUP,Map.of(PAYLOAD_NAME,requestDto.getName(),
+                        PAYLOAD_PWD_HASH,passwordEncoder.encode(requestDto.getPassword()))
+                );
 
         //send email to user for otp
         emailSender.sendEmail(
                 requestDto.getEmail(),
                 "Verify your email",
                 "verify_email",
-                Map.of("otp",otp)
+                Map.of("otp", otpHelperDto.getOtp())
         );
 
         //return response
         log.info("Successfully Initiated signup with email: {}",requestDto.getEmail());
-        return InitiateSignupResponseDto.builder()
-                .registrationId(registrationId).nextResendAt(signupSession.getLastResendAt()+TIME_LIMIT)
+        return InitiateOtpResponseDto.builder()
+                .registrationId(otpHelperDto.getRegistrationId())
+                .nextResendAt(otpHelperDto.getNextResendAt())
                 .build();
     }
 
     @Override
     @Transactional
-    public CompleteSignupResponseDto completeSignup(CompleteSignupRequestDto requestDto, String ipAddress) {
+    public OtpVerifyResponseDto completeSignup(SignupOtpVerifyRequestDto requestDto, String ipAddress) {
         log.info("Completing signup with registrationId: {}", requestDto.getRegistrationId());
+        //verify and get the otp session
+        String registrationId = requestDto.getRegistrationId();
+        OtpSession otpSession = otpService.verifyOtp(
+                registrationId,
+                ipAddress, OtpType.SIGNUP,
+                requestDto.getOtp()
+        );
 
-        //fetch signup session from redis
-        SignupSession signupSession = signupSessionUtil.fetchFromRedis(requestDto.getRegistrationId());
+        //get payload
+        Map<String,String> payload = otpSession.getPayload();
 
-        if (signupSession == null) {
-            throw new SessionNotFoundException("Session expired. Please register again.");
-        }
-
-        //if registration window expired then delete session
-        long now = System.currentTimeMillis();
-        long sessionAge = now - signupSession.getSessionCreatedAt();
-
-        if(sessionAge > ABSOLUTE_SESSION_LIMIT){
-            signupSessionUtil.deleteFromRedis(requestDto.getRegistrationId());
-            throw new SecurityRiskException("Registration session timed out.");
-        }
-
-        //ip match
-        if (!ipAddress.equals(signupSession.getIpAddress())) {
-            signupSessionUtil.deleteFromRedis(requestDto.getRegistrationId());
-            throw new SecurityRiskException("IP Address mismatch. Please register again.");
-        }
-
-        //if somehow arrive here with max attempts already
-        if (signupSession.getAttempts() >= MAX_LIMIT) {
-            signupSessionUtil.deleteFromRedis(requestDto.getRegistrationId());
-            throw new SecurityRiskException("Maximum attempts exceeded. Please register again.");
-        }
-
-        //validate OTP
-        if (!passwordEncoder.matches(requestDto.getOtp(), signupSession.getOtpHash())) {
-
-            //increment attempts
-            int newAttempts = signupSession.getAttempts() + 1;
-            signupSession.setAttempts(newAttempts);
-
-            //check if this was the final allowed attempt
-            if (newAttempts >= MAX_LIMIT) {
-                signupSessionUtil.deleteFromRedis(requestDto.getRegistrationId());
-                throw new SecurityRiskException("Maximum attempts reached. Session invalidated.");
-            }
-
-            //update in redis for other attempts
-            boolean updated = signupSessionUtil.updateInRedis(requestDto.getRegistrationId(), signupSession);
-            if (!updated) {
-                throw new SessionNotFoundException("Session expired during verification.");
-            }
-
-            //throw 400 Bad Request
-            throw new BadRequestException("Invalid OTP. Attempts left: " + (MAX_LIMIT - newAttempts));
-        }
-
-        //if otp match build user
+        //build user
         User user = User.builder()
-                .name(signupSession.getName())
-                .email(signupSession.getEmail())
-                .passwordHash(signupSession.getPasswordHash())
+                .name(payload.get(PAYLOAD_NAME))
+                .email(otpSession.getEmail())
+                .passwordHash(payload.get(PAYLOAD_PWD_HASH))
                 .roles(Set.of(Role.GUEST)).build();
 
         //save user in db
         User savedUser = userRepository.saveAndFlush(user);
 
-        //clean user from redis
-        signupSessionUtil.deleteFromRedis(requestDto.getRegistrationId());
+        //clean otp session from redis
+        otpService.deleteOtpSession(registrationId,otpSession);
 
         log.info("Signup successful for userId: {}", savedUser.getId());
         //send email to user for onboarding
@@ -226,69 +166,121 @@ public class AuthServiceImpl implements AuthService {
                 "welcome",
                 Map.of("userName",savedUser.getName(),"userEmail",savedUser.getEmail())
         );
-        return modelMapper.map(savedUser, CompleteSignupResponseDto.class);
+        return OtpVerifyResponseDto
+                .builder().message("Account has been successfully created.")
+                .build();
     }
 
     @Override
     public ResendOtpResponseDto resendSignupOtp(ResendOtpRequestDto requestDto, String ipAddress) {
         log.info("Resending otp for signup with registrationId: {}", requestDto.getRegistrationId());
-        //fetch signup session from redis
-        SignupSession signupSession = signupSessionUtil.fetchFromRedis(requestDto.getRegistrationId());
+        //update the otp session with new otp
+        OtpHelperDto otpHelperDto = otpService.resendOtp(
+               requestDto.getRegistrationId(),
+               ipAddress,OtpType.SIGNUP
+        );
 
-        if (signupSession == null) {
-            throw new SessionNotFoundException("Session expired. Please register again.");
-        }
-
-        //if registration window expired then delete session
-        long now = System.currentTimeMillis();
-        long sessionAge = now - signupSession.getSessionCreatedAt();
-
-        if(sessionAge > ABSOLUTE_SESSION_LIMIT){
-            signupSessionUtil.deleteFromRedis(requestDto.getRegistrationId());
-            throw new SecurityRiskException("Registration session timed out.");
-        }
-
-        //ip match
-        if (!ipAddress.equals(signupSession.getIpAddress())) {
-            signupSessionUtil.deleteFromRedis(requestDto.getRegistrationId());
-            throw new SecurityRiskException("IP Address mismatch. Please register again.");
-        }
-
-        //if somehow arrive here with max resend attempts already
-        int resendCount = signupSession.getResendCount();
-        if (resendCount >= MAX_LIMIT) {
-            throw new BadRequestException("Maximum attempts reached.");
-        }
-
-        //check if time limit has been reached to allow resend
-        long timePassed = now - signupSession.getLastResendAt();
-        if(timePassed<TIME_LIMIT){
-            throw new BadRequestException("Please wait for "+((TIME_LIMIT - timePassed)/1000) + " seconds");
-        }
-
-        //otherwise generate new otp
-        String newOtp = otpGenerator.generate();
-
-        //update in redis
-        signupSession.setOtpHash(passwordEncoder.encode(newOtp));
-        signupSession.setResendCount(resendCount+1);
-        signupSession.setLastResendAt(now);
-        signupSession.setAttempts(0); //new otp means new attempts
-
-        //instead of updating we re-push to redis to give time for new otp
-        //so ttl is reset
-        signupSessionUtil.pushToRedis(requestDto.getRegistrationId(),signupSession);
 
         //send email to user for new otp
         emailSender.sendEmail(
-                signupSession.getEmail(),
+                otpHelperDto.getEmail(),
                 "Verify your email",
                 "verify_email",
-                Map.of("otp",newOtp)
+                Map.of("otp",otpHelperDto.getOtp())
         );
         log.info("Successfully resent otp for signup with registrationId: {}", requestDto.getRegistrationId());
         return ResendOtpResponseDto.builder()
-                .nextResendAt(now+TIME_LIMIT).build();
+                .nextResendAt(otpHelperDto.getNextResendAt()).build();
+    }
+
+    @Override
+    public InitiateOtpResponseDto initiateForgotPwd(ForgotPwdRequestDto requestDto, String ipAddress) {
+        log.info("Initiating forgot password with email: {}",requestDto.getEmail());
+        if (!userRepository.existsByEmail(requestDto.getEmail())) {
+            throw new BadRequestException("User not found with this email.");
+        }
+        //create otp session
+        OtpHelperDto otpHelperDto = otpService.createOtpSession(
+                requestDto.getEmail(),ipAddress,
+                OtpType.FORGOT,Map.of());
+
+        //send email to user for otp
+        emailSender.sendEmail(
+                requestDto.getEmail(),
+                "Reset your password",
+                "reset_pwd",
+                Map.of("otp", otpHelperDto.getOtp())
+        );
+
+        //return response
+        log.info("Successfully Initiated forgot pwd with email: {}",requestDto.getEmail());
+        return InitiateOtpResponseDto.builder()
+                .registrationId(otpHelperDto.getRegistrationId())
+                .nextResendAt(otpHelperDto.getNextResendAt())
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public OtpVerifyResponseDto completeForgotPwd(ForgotOtpVerifyRequestDto requestDto, String ipAddress) {
+        log.info("Completing forgot pwd with registrationId: {}", requestDto.getRegistrationId());
+        String newPassword = requestDto.getNewPassword();
+        if(newPassword == null || newPassword.isEmpty()){
+            throw new BadRequestException("password cannot be null or empty.");
+        }
+        //verify and get the otp session
+        String registrationId = requestDto.getRegistrationId();
+        OtpSession otpSession = otpService.verifyOtp(
+                registrationId,
+                ipAddress, OtpType.FORGOT,
+                requestDto.getOtp()
+        );
+
+        //update user
+        User user = userRepository.findByEmail(otpSession.getEmail())
+                .orElseThrow(() -> new SessionNotFoundException("User not found."));
+
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+
+        //save user in db
+        User savedUser = userRepository.saveAndFlush(user);
+
+        //clean otp session from redis
+        otpService.deleteOtpSession(registrationId,otpSession);
+
+        log.info("Forgot pwd successful for userId: {}", savedUser.getId());
+        //send email to user for reset pwd
+        emailSender.sendEmail(
+                savedUser.getEmail(),
+                "Password Reset Successful",
+                "reset_pwd_success",
+                Map.of("userName",savedUser.getName(),"userEmail",savedUser.getEmail())
+        );
+        return OtpVerifyResponseDto
+                .builder().message("Password reset successfully.")
+                .build();
+    }
+
+    @Override
+    public ResendOtpResponseDto resendForgotPwdOtp(ResendOtpRequestDto requestDto, String ipAddress) {
+        log.info("Resending otp for forgot pwd with registrationId: {}", requestDto.getRegistrationId());
+        //update the otp session
+        OtpHelperDto otpHelperDto = otpService.resendOtp(
+                requestDto.getRegistrationId(),
+                ipAddress,OtpType.FORGOT
+        );
+
+
+        //send email to user for new otp
+        emailSender.sendEmail(
+                otpHelperDto.getEmail(),
+                "Reset your password",
+                "reset_pwd",
+                Map.of("otp", otpHelperDto.getOtp())
+        );
+        log.info("Successfully resent otp for forgot pwd with registrationId: {}", requestDto.getRegistrationId());
+        return ResendOtpResponseDto.builder()
+                .nextResendAt(otpHelperDto.getNextResendAt()).build();
     }
 
 

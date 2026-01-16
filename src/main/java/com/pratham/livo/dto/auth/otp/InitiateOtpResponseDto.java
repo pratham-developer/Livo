@@ -1,13 +1,15 @@
-package com.pratham.livo.dto.auth;
+package com.pratham.livo.dto.auth.otp;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class CompleteSignupRequestDto {
+@Builder
+public class InitiateOtpResponseDto {
     private String registrationId;
-    private String otp;
+    private long nextResendAt;
 }
