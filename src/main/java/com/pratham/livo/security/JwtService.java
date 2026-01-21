@@ -1,6 +1,7 @@
 package com.pratham.livo.security;
 
 import com.pratham.livo.dto.auth.AccessTokenClaims;
+import com.pratham.livo.dto.auth.RefreshTokenClaims;
 import com.pratham.livo.entity.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
@@ -56,22 +57,26 @@ public class JwtService {
     }
 
     //generate refresh token for the user
-    public String generateRefreshToken(Long userId){
+    public String generateRefreshToken(Long userId, String familyId){
         return Jwts.builder()
                 .id(UUID.randomUUID().toString())
                 .subject(String.valueOf(userId))
+                .claim("fid",familyId)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + refreshExpiry))
                 .signWith(getRefreshSigningKey())
                 .compact();
     }
 
-    public Long getUserIdFromRefreshToken(String refreshToken){
+    public RefreshTokenClaims parseRefreshToken(String refreshToken){
         Claims claims = Jwts.parser().verifyWith(getRefreshSigningKey()).build()
                 .parseSignedClaims(refreshToken)
                 .getPayload();
 
-        return Long.valueOf(claims.getSubject());
+        return RefreshTokenClaims.builder()
+                .userId(Long.valueOf(claims.getSubject()))
+                .familyId(claims.get("fid",String.class))
+                .build();
     }
 
     public AccessTokenClaims parseAccessToken(String accessToken){

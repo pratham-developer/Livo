@@ -37,25 +37,26 @@ public class SessionServiceImpl implements SessionService {
 
     @Override
     @Transactional
-    public String createSession(Long userId, String refreshToken) {
+    public String createSession(Long userId, String refreshToken, String familyId) {
         //lock the user to prevent race conditions
         User user = userRepository.findByIdAndLock(userId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "user not found"
                 ));
         List<Session> sessionList = sessionRepository.findByUserOrderByLastUsedAtAsc(user);
-        if(sessionList.size()>=SESSION_LIMIT){
-            Session toDelete = sessionList.getFirst();
-            String jti = toDelete.getJti();
-            sessionRepository.delete(toDelete);
-            sessionRepository.flush(); //force delete now
-            accessTokenBlacklister.blacklist(jti);
+        int excess = sessionList.size() - SESSION_LIMIT + 1;
+        if(excess>0){
+            List<Session> toDeleteList = sessionList.subList(0,excess);
+            List<String> jtiList = toDeleteList.stream().map(session -> session.getJti()).toList();
+            sessionRepository.deleteAllInBatch(toDeleteList); //auto executes sql query at the same instant
+            //bypasses persistence context, so flush is not required
+            accessTokenBlacklister.blacklistBatch(jtiList);
         }
 
         String refreshTokenHash = refreshTokenHasher.hash(refreshToken);
         String jti = UUID.randomUUID().toString();
         Session toSave = Session.builder()
-                .user(user).refreshTokenHash(refreshTokenHash)
+                .user(user).refreshTokenHash(refreshTokenHash).familyId(familyId)
                 .jti(jti).lastUsedAt(LocalDateTime.now()).build();
         sessionRepository.save(toSave);
         return jti;
@@ -63,10 +64,8 @@ public class SessionServiceImpl implements SessionService {
 
     @Override
     @Transactional
-    public void deleteSession(Long userId, String refreshToken) {
-        String refreshTokenHash = refreshTokenHasher.hash(refreshToken);
-
-        Optional<Session> optionalSession = sessionRepository.findByUserIdAndRefreshTokenHash(userId, refreshTokenHash);
+    public void deleteSession(Long userId, String familyId) {
+        Optional<Session> optionalSession = sessionRepository.findByUserIdAndFamilyId(userId, familyId);
         if(optionalSession.isEmpty()) return;
 
         Session session = optionalSession.get();
@@ -78,15 +77,24 @@ public class SessionServiceImpl implements SessionService {
 
     @Override
     @Transactional
-    public LoginResponseDto refreshSession(Long userId, String refreshToken) {
+    public LoginResponseDto refreshSession(Long userId, String refreshToken, String familyId) {
+
+        //fetch the session along with its user using the userId and familyId
+        Session session = sessionRepository.findSessionWithUser(userId,familyId).orElse(null);
+        if(session == null){
+            //possibly session got deleted due to session limit
+            return null;
+        }
 
         //hash the incoming refresh token
         String refreshTokenHash = refreshTokenHasher.hash(refreshToken);
 
-        //fetch the session along with its user using the userId and hash
-        Session session = sessionRepository.findSessionWithUser(userId,refreshTokenHash).orElse(null);
-        if(session == null){
-            //possibly an attack
+        if(!refreshTokenHash.equals(session.getRefreshTokenHash())){
+            if (session.getLastUsedAt().isAfter(LocalDateTime.now().minusSeconds(20))) {
+                // likely a race condition
+                return null;
+            }
+            //possibly an attack to use old token
             List<String> jtiList = sessionRepository.findAllJti(userId);
             sessionRepository.deleteAllSessionsForUser(userId);
             accessTokenBlacklister.blacklistBatch(jtiList);
@@ -101,7 +109,7 @@ public class SessionServiceImpl implements SessionService {
 
         //generate new access(with new jti) and refresh token
         String newAccessToken = jwtService.generateAccessToken(session.getUser(),newJti);
-        String newRefreshToken = jwtService.generateRefreshToken(session.getUser().getId());
+        String newRefreshToken = jwtService.generateRefreshToken(session.getUser().getId(),session.getFamilyId());
 
         //hash the new refresh token
         String newRefreshTokenHash = refreshTokenHasher.hash(newRefreshToken);

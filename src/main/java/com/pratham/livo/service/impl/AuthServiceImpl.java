@@ -6,7 +6,6 @@ import com.pratham.livo.entity.User;
 import com.pratham.livo.enums.OtpType;
 import com.pratham.livo.enums.Role;
 import com.pratham.livo.exception.BadRequestException;
-import com.pratham.livo.exception.SecurityRiskException;
 import com.pratham.livo.exception.SessionNotFoundException;
 import com.pratham.livo.repository.UserRepository;
 import com.pratham.livo.security.JwtService;
@@ -27,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -55,10 +55,11 @@ public class AuthServiceImpl implements AuthService {
         );
 
         User user = (User) authentication.getPrincipal();
-        String refreshToken = jwtService.generateRefreshToken(user.getId());
+        String familyId = UUID.randomUUID().toString();
+        String refreshToken = jwtService.generateRefreshToken(user.getId(), familyId);
 
         //create session and get the jti for it
-        String jti = sessionService.createSession(user.getId(),refreshToken);
+        String jti = sessionService.createSession(user.getId(),refreshToken, familyId);
 
         //create access token for this user with this jti
         String accessToken = jwtService.generateAccessToken(user,jti);
@@ -77,12 +78,14 @@ public class AuthServiceImpl implements AuthService {
         AuthenticatedUser authenticatedUser = securityHelper.getCurrentAuthenticatedUser().orElseThrow(
                 ()->new AuthenticationServiceException("Cannot verify the authenticated user.")
         );
-        Long userId = jwtService.getUserIdFromRefreshToken(refreshToken);
+        RefreshTokenClaims claims = jwtService.parseRefreshToken(refreshToken);
+        Long userId = claims.getUserId();
+        String familyId = claims.getFamilyId();
         if(!authenticatedUser.getId().equals(userId)){
             throw new AuthenticationServiceException("Cannot verify the authenticated user.");
         }
         log.info("Logging out user with id: {}",userId);
-        sessionService.deleteSession(userId,refreshToken);
+        sessionService.deleteSession(userId,familyId);
         log.info("Successfully logged out user with id: {}",userId);
     }
 
@@ -91,11 +94,13 @@ public class AuthServiceImpl implements AuthService {
         if(refreshToken == null || refreshToken.isEmpty()){
             throw new BadRequestException("Refresh token cannot be null or empty");
         }
-        Long userId = jwtService.getUserIdFromRefreshToken(refreshToken);
+        RefreshTokenClaims claims = jwtService.parseRefreshToken(refreshToken);
+        Long userId = claims.getUserId();
+        String familyId = claims.getFamilyId();
         log.info("Refreshing user with id: {}",userId);
-        LoginResponseDto loginResponseDto = sessionService.refreshSession(userId,refreshToken);
+        LoginResponseDto loginResponseDto = sessionService.refreshSession(userId,refreshToken,familyId);
         if(loginResponseDto==null){
-            throw new SecurityRiskException("Security Risk Detected. Please login again.");
+            throw new SessionNotFoundException("Please login again.");
         }
         log.info("Successfully refreshed user with id: {}",userId);
         return loginResponseDto;

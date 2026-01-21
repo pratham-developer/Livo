@@ -13,16 +13,15 @@ import java.util.Optional;
 public interface SessionRepository extends JpaRepository<Session,Long> {
 
     List<Session> findByUserOrderByLastUsedAtAsc(User user);
-    Optional<Session> findByUserIdAndRefreshTokenHash(Long userId, String refreshTokenHash);
 
     @Query("""
             select s from Session s join fetch s.user u
             where u.id = :userId and
-            s.refreshTokenHash = :refreshTokenHash
+            s.familyId = :familyId
             """)
     Optional<Session> findSessionWithUser(
             @Param("userId") Long userId,
-            @Param("refreshTokenHash") String refreshTokenHash);
+            @Param("familyId") String familyId);
 
     @Query("select s.jti from Session s where s.user.id = :userId")
     List<String> findAllJti(@Param("userId") Long userId);
@@ -30,4 +29,6 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
     @Modifying(flushAutomatically = true,clearAutomatically = true)
     @Query("delete from Session s where s.user.id = :userId")
     void deleteAllSessionsForUser(@Param("userId") Long userId);
+
+    Optional<Session> findByUserIdAndFamilyId(Long userId, String familyId);
 }

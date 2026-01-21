@@ -20,6 +20,9 @@ public class Session {
     @JoinColumn(nullable = false)
     private User user;
 
+    @Column(nullable = false,unique = true)
+    private String familyId;
+
     @Column(unique = true, nullable = false)
     private String refreshTokenHash;
 
