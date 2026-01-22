@@ -15,14 +15,24 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
+@Table(
+        indexes = {
+                @Index(name = "idx_payment_razorpay_order_id", columnList = "razorpayOrderId"),
+                @Index(name = "idx_payment_booking_id",columnList = "booking_id")
+        }
+)
 public class Payment {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(unique = true,nullable = false)
-    private String transactionId;
+    @Column(nullable = false, unique = true)
+    private String razorpayOrderId;
+
+    private String razorpayPaymentId;
+
+    private String razorpaySignature;
 
     @Enumerated(value = EnumType.STRING)
     @Column(nullable = false)
@@ -32,6 +42,7 @@ public class Payment {
     private BigDecimal amount;
 
     @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "booking_id", nullable = false)
     @ToString.Exclude
     private Booking booking;
 
@@ -41,5 +52,9 @@ public class Payment {
 
     @UpdateTimestamp
     private LocalDateTime updatedAt;
+
+    @Version
+    @Column(nullable = false)
+    private Long version;
 
 }

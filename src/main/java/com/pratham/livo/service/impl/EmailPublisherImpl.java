@@ -20,7 +20,7 @@ public class EmailPublisherImpl implements EmailPublisher {
         log.info("Queuing email for {}",emailMessage.getTo());
         rabbitTemplate.convertAndSend(
                 RabbitMQConfig.MAIN_EXCHANGE,
-                RabbitMQConfig.ROUTING_KEY,
+                RabbitMQConfig.EMAIL_ROUTING_KEY,
                 emailMessage
         );
     }

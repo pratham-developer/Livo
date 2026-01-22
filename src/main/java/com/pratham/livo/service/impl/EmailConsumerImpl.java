@@ -31,7 +31,7 @@ public class EmailConsumerImpl implements EmailConsumer {
     private String fromName;
 
     @Override
-    @RabbitListener(queues = RabbitMQConfig.MAIN_QUEUE)
+    @RabbitListener(queues = RabbitMQConfig.EMAIL_QUEUE)
     public void consumeEmail(EmailMessage emailMessage) {
         try{
             log.info("Sending email to {}", emailMessage.getTo());
