@@ -2,7 +2,7 @@ package com.pratham.livo.utils;
 
 
 import com.pratham.livo.dto.message.EmailMessage;
-import com.pratham.livo.service.EmailPublisher;
+import com.pratham.livo.service.MessagePublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -16,7 +16,7 @@ import java.util.Map;
 public class EmailSender {
 
     private final TemplateEngine templateEngine;
-    private final EmailPublisher emailPublisher;
+    private final MessagePublisher messagePublisher;
 
     private String generateHtml(String templateName, Map<String, Object> templateVariables) {
         Context context = new Context();
@@ -30,7 +30,7 @@ public class EmailSender {
             String htmlContent = generateHtml(templateName,templateVariables);
             EmailMessage emailMessage = EmailMessage.builder()
                     .to(to).subject(subject).htmlContent(htmlContent).build();
-            emailPublisher.publish(emailMessage);
+            messagePublisher.publishEmail(emailMessage);
         }catch (Exception e) {
             log.error("Failure in sending email to {}", to, e);
         }

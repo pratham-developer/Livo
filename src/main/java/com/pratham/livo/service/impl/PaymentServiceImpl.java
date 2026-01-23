@@ -1,6 +1,7 @@
 package com.pratham.livo.service.impl;
 
 import com.pratham.livo.config.RazorpayConfig;
+import com.pratham.livo.dto.message.PaymentMessage;
 import com.pratham.livo.dto.payment.PaymentInitResponseDto;
 import com.pratham.livo.dto.payment.PaymentVerifyRequestDto;
 import com.pratham.livo.entity.Booking;
@@ -13,6 +14,8 @@ import com.pratham.livo.exception.ResourceNotFoundException;
 import com.pratham.livo.repository.BookingRepository;
 import com.pratham.livo.repository.InventoryRepository;
 import com.pratham.livo.repository.PaymentRepository;
+import com.pratham.livo.repository.RazorpayEventRepository;
+import com.pratham.livo.service.MessagePublisher;
 import com.pratham.livo.service.PaymentService;
 import com.pratham.livo.utils.IdempotencyUtil;
 import com.razorpay.Order;
@@ -42,6 +45,8 @@ public class PaymentServiceImpl implements PaymentService {
     private final RazorpayConfig razorpayConfig;
     private final RazorpayClient razorpayClient;
     private final InventoryRepository inventoryRepository;
+    private final RazorpayEventRepository razorpayEventRepository;
+    private final MessagePublisher messagePublisher;
 
     @Override
     @Transactional
@@ -174,10 +179,17 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     //helper method, to be used inside a method which uses @transactional
-    private void confirmPaymentSuccess(Payment payment, String razorpayPaymentId, String razorpaySignature) {
+    @Override
+    public void confirmPaymentSuccess(Payment payment, String razorpayPaymentId, String razorpaySignature) {
         //explicitly fetch the latest booking state
         Booking booking = bookingRepository.findById(payment.getBooking().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Booking not found"));
+
+        //if booking is already confirmed
+        if (booking.getBookingStatus() == BookingStatus.CONFIRMED) {
+            log.info("Booking with id: {} is already confirmed.", booking.getId());
+            return;
+        }
 
         if(booking.getBookingStatus() == BookingStatus.EXPIRED){
             //TODO: handle async refund
@@ -222,13 +234,21 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
-    public void processWebhook(String payload, String webhookSignature){
+    public void processWebhook(String payload, String webhookSignature, String eventId){
         try {
             //verify the incoming webhook signature on the payload with the stored webhook secret
             boolean isValid = Utils.verifyWebhookSignature(payload,webhookSignature,razorpayConfig.getWebhookSecret());
             if(!isValid){
                 throw new RazorpayException("signature mismatch");
             }
+
+            //achieving idempotency
+            int isNewEvent = razorpayEventRepository.storeEvent(eventId);
+            if(isNewEvent == 0){
+                log.info("Duplicate Webhook Event ignored: {}", eventId);
+                return;
+            }
+            //extract payload
             JSONObject json = new JSONObject(payload);
             String event = json.getString("event");
 
@@ -239,16 +259,10 @@ public class PaymentServiceImpl implements PaymentService {
                 String razorpayOrderId = entity.getString("order_id");
                 String razorpayPaymentId = entity.getString("id");
 
-                //find the payment row for this order id
-                Payment payment = paymentRepository.findByRazorpayOrderId(razorpayOrderId)
-                        .orElseThrow(()->new ResourceNotFoundException("Payment not found for order: " + razorpayOrderId));
-
-                //if already refunded or successful then return early
-                if(payment.getPaymentStatus() == PaymentStatus.REFUNDED || payment.getPaymentStatus() == PaymentStatus.SUCCESSFUL){
-                    return;
-                }
-                //else confirm payment
-                confirmPaymentSuccess(payment,razorpayPaymentId, "WEBHOOK_VERIFIED");
+                PaymentMessage paymentMessage = PaymentMessage
+                        .builder().razorpayOrderId(razorpayOrderId).razorpayPaymentId(razorpayPaymentId)
+                                .build();
+                messagePublisher.publishPaymentForWebhook(paymentMessage);
             }
         }catch (RazorpayException e) {
             log.error("Webhook Signature Validation Failed", e);
