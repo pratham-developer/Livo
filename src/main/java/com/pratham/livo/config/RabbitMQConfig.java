@@ -12,6 +12,8 @@ public class RabbitMQConfig {
 
     public static final String EMAIL_QUEUE = "email.msg.queue";
     public static final String PAYMENT_QUEUE = "payment.msg.queue";
+    public static final String REFUND_QUEUE = "refund.msq.queue";
+    public static final String REFUND_UPDATE_QUEUE = "refund.update.msg.queue";
     public static final String DLQ_QUEUE = "msg.dlq";
 
     public static final String MAIN_EXCHANGE = "msg.exchange";
@@ -19,6 +21,8 @@ public class RabbitMQConfig {
 
     public static final String EMAIL_ROUTING_KEY = "email.key";
     public static final String PAYMENT_ROUTING_KEY = "payment.key";
+    public static final String REFUND_ROUTING_KEY = "refund.key";
+    public static final String REFUND_UPDATE_ROUTING_KEY = "refund.update.key";
     public static final String DLQ_ROUTING_KEY = "dlq.key";
 
     @Bean
@@ -32,6 +36,22 @@ public class RabbitMQConfig {
     @Bean
     public Queue paymentQueue() {
         return QueueBuilder.durable(PAYMENT_QUEUE)
+                .withArgument("x-dead-letter-exchange", DLQ_EXCHANGE)
+                .withArgument("x-dead-letter-routing-key", DLQ_ROUTING_KEY)
+                .build();
+    }
+
+    @Bean
+    public Queue refundQueue() {
+        return QueueBuilder.durable(REFUND_QUEUE)
+                .withArgument("x-dead-letter-exchange", DLQ_EXCHANGE)
+                .withArgument("x-dead-letter-routing-key", DLQ_ROUTING_KEY)
+                .build();
+    }
+
+    @Bean
+    public Queue refundUpdateQueue() {
+        return QueueBuilder.durable(REFUND_UPDATE_QUEUE)
                 .withArgument("x-dead-letter-exchange", DLQ_EXCHANGE)
                 .withArgument("x-dead-letter-routing-key", DLQ_ROUTING_KEY)
                 .build();
@@ -69,6 +89,23 @@ public class RabbitMQConfig {
                 .to(mainExchange())
                 .with(PAYMENT_ROUTING_KEY);
     }
+
+    @Bean
+    public Binding refundBinding() {
+        return BindingBuilder
+                .bind(refundQueue())
+                .to(mainExchange())
+                .with(REFUND_ROUTING_KEY);
+    }
+
+    @Bean
+    public Binding refundUpdateBinding() {
+        return BindingBuilder
+                .bind(refundUpdateQueue())
+                .to(mainExchange())
+                .with(REFUND_UPDATE_ROUTING_KEY);
+    }
+
 
     @Bean
     public Binding dlqBinding() {

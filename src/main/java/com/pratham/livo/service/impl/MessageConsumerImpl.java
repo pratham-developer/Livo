@@ -8,10 +8,14 @@ import brevoModel.SendSmtpEmailTo;
 import com.pratham.livo.config.RabbitMQConfig;
 import com.pratham.livo.dto.message.EmailMessage;
 import com.pratham.livo.dto.message.PaymentMessage;
+import com.pratham.livo.dto.message.RefundMessage;
+import com.pratham.livo.dto.message.RefundUpdateMessage;
 import com.pratham.livo.entity.Payment;
 import com.pratham.livo.enums.PaymentStatus;
+import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.ResourceNotFoundException;
 import com.pratham.livo.repository.PaymentRepository;
+import com.pratham.livo.repository.RefundRepository;
 import com.pratham.livo.service.MessageConsumer;
 import com.pratham.livo.service.PaymentService;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +36,7 @@ public class MessageConsumerImpl implements MessageConsumer {
     private final TransactionalEmailsApi transactionalEmailsApi;
     private final PaymentRepository paymentRepository;
     private final PaymentService paymentService;
+    private final RefundRepository refundRepository;
 
     @Value("${livo.email.from.email}")
     private String fromEmail;
@@ -71,6 +76,40 @@ public class MessageConsumerImpl implements MessageConsumer {
             }
             //else confirm payment
             paymentService.confirmPaymentSuccess(payment,razorpayPaymentId, "WEBHOOK_VERIFIED");
+        }catch(BadRequestException e) {
+            log.info("Payment processed but rejected (Refunded): {}", e.getMessage());
+        }catch(Exception e) {
+            log.error("System error processing payment webhook", e);
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    @RabbitListener(queues = RabbitMQConfig.REFUND_QUEUE)
+    @Transactional
+    public void consumeRefund(RefundMessage refundMessage) {
+        try{
+            //find payment
+            Payment payment = paymentRepository.findByRazorpayOrderId(refundMessage.getRazorpayOrderId())
+                    .orElseThrow(()->new ResourceNotFoundException("Payment not found with id: " + refundMessage.getRazorpayPaymentId()));
+            if (payment.getRazorpayPaymentId() == null) {
+                payment.setRazorpayPaymentId(refundMessage.getRazorpayPaymentId());
+            }
+            //initiate refund
+            paymentService.initiateRefund(payment,refundMessage.getReason());
+        }catch (Exception e){
+            throw new RuntimeException(e);
+        }
+
+    }
+
+    @Override
+    @RabbitListener(queues = RabbitMQConfig.REFUND_UPDATE_QUEUE)
+    @Transactional
+    public void consumeRefundUpdate(RefundUpdateMessage refundUpdateMessage) {
+        try {
+            refundRepository.updateStatus(
+                    refundUpdateMessage.getRazorpayRefundId(), refundUpdateMessage.getStatus());
         }catch (Exception e){
             throw new RuntimeException(e);
         }

@@ -17,13 +17,9 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @Builder
 public class RazorpayEvent {
-
     @Id
     @Column(name = "event_id", nullable = false, length = 100)
     private String eventId;
-
-    @Column(name = "picked", nullable = false)
-    private Boolean picked = false;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

@@ -2,6 +2,8 @@ package com.pratham.livo.service.impl;
 
 import com.pratham.livo.config.RazorpayConfig;
 import com.pratham.livo.dto.message.PaymentMessage;
+import com.pratham.livo.dto.message.RefundMessage;
+import com.pratham.livo.dto.message.RefundUpdateMessage;
 import com.pratham.livo.dto.payment.PaymentInitResponseDto;
 import com.pratham.livo.dto.payment.PaymentVerifyRequestDto;
 import com.pratham.livo.entity.Booking;
@@ -11,17 +13,11 @@ import com.pratham.livo.enums.BookingStatus;
 import com.pratham.livo.enums.PaymentStatus;
 import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.ResourceNotFoundException;
-import com.pratham.livo.repository.BookingRepository;
-import com.pratham.livo.repository.InventoryRepository;
-import com.pratham.livo.repository.PaymentRepository;
-import com.pratham.livo.repository.RazorpayEventRepository;
+import com.pratham.livo.repository.*;
 import com.pratham.livo.service.MessagePublisher;
 import com.pratham.livo.service.PaymentService;
 import com.pratham.livo.utils.IdempotencyUtil;
-import com.razorpay.Order;
-import com.razorpay.RazorpayClient;
-import com.razorpay.RazorpayException;
-import com.razorpay.Utils;
+import com.razorpay.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.json.JSONObject;
@@ -47,6 +43,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final InventoryRepository inventoryRepository;
     private final RazorpayEventRepository razorpayEventRepository;
     private final MessagePublisher messagePublisher;
+    private final RefundRepository refundRepository;
 
     @Override
     @Transactional
@@ -192,7 +189,12 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         if(booking.getBookingStatus() == BookingStatus.EXPIRED){
-            //TODO: handle async refund
+            //handle async refund
+            RefundMessage refundMessage = RefundMessage.builder()
+                    .razorpayOrderId(payment.getRazorpayOrderId())
+                            .razorpayPaymentId(razorpayPaymentId).reason("Booking Expired")
+                            .build();
+            messagePublisher.publishRefund(refundMessage);
             log.info("Late payment received for Expired Booking ID: {}", booking.getId());
             throw new BadRequestException("Booking has expired. Payment will be refunded.");
         }
@@ -226,7 +228,12 @@ public class PaymentServiceImpl implements PaymentService {
             inventoryRepository.saveAll(inventoryList);
             log.info("Payment confirmed and Inventory updated for Booking ID: {}", booking.getId());
         }catch (ObjectOptimisticLockingFailureException e){
-            //TODO: handle async refund
+            //handle async refund
+            RefundMessage refundMessage = RefundMessage.builder()
+                    .razorpayOrderId(payment.getRazorpayOrderId())
+                    .razorpayPaymentId(razorpayPaymentId).reason("Room Unavailable (Race Condition)")
+                    .build();
+            messagePublisher.publishRefund(refundMessage);
             log.info("Race condition detected for Booking ID: {}", booking.getId());
             throw new BadRequestException("Booking was not completed. Payment will be refunded.");
         }
@@ -264,6 +271,18 @@ public class PaymentServiceImpl implements PaymentService {
                                 .build();
                 messagePublisher.publishPaymentForWebhook(paymentMessage);
             }
+            //if refund is captured then update its status
+            else if("refund.processed".equals(event) || "refund.failed".equals(event)){
+                JSONObject entity = json.getJSONObject("payload").getJSONObject("refund").getJSONObject("entity");
+                //get razorpayRefundId and status
+                String razorpayRefundId = entity.getString("id");
+                String status = entity.getString("status");
+                RefundUpdateMessage refundUpdateMessage =
+                        RefundUpdateMessage.builder()
+                                .razorpayRefundId(razorpayRefundId).status(status)
+                                .build();
+                messagePublisher.publishRefundUpdate(refundUpdateMessage);
+            }
         }catch (RazorpayException e) {
             log.error("Webhook Signature Validation Failed", e);
             throw new BadRequestException("Webhook Signature Validation Failed");
@@ -271,5 +290,61 @@ public class PaymentServiceImpl implements PaymentService {
             log.error("Error processing webhook", e);
             throw new RuntimeException("Error processing webhook");
         }
+    }
+
+
+    //helper method, to be used inside a method which uses @transactional
+    @Override
+    public void initiateRefund(Payment payment, String reason) {
+        log.info("Initiating refund for payment with id: {}",payment.getId());
+        //if already refunded then return
+        if(payment.getPaymentStatus() == PaymentStatus.REFUNDED){
+            log.info("Payment with id: {} is already refunded",payment.getId());
+            return;
+        }
+        //if payment failed then cannot refund
+        if(payment.getPaymentStatus() == PaymentStatus.FAILED){
+            log.info("Payment with id: {} is not in a valid state",payment.getId());
+            throw new BadRequestException("Payment is not in a valid state");
+        }
+        //if either pending or successful, check money is debited by razorpay
+        if(payment.getRazorpayPaymentId() == null){
+            throw new BadRequestException("Cannot refund without razorpayPaymentId");
+        }
+
+        try{
+            //build refund request
+            JSONObject refundRequest = new JSONObject();
+            refundRequest.put("amount",payment.getAmount().multiply(BigDecimal.valueOf(100)).longValue());
+            refundRequest.put("speed","optimum");
+
+            //add note for reason
+            JSONObject notes = new JSONObject();
+            notes.put("reason",reason);
+            refundRequest.put("notes",notes);
+
+            //use razorpay client to process refund
+            Refund razorpayRefund = razorpayClient.payments.refund(payment.getRazorpayPaymentId(),refundRequest);
+            String razorpayRefundId = razorpayRefund.get("id");
+            String razorpayRefundStatus = razorpayRefund.get("status");
+
+            //create refund for db
+            com.pratham.livo.entity.Refund refund = com.pratham.livo.entity.Refund
+                    .builder().razorpayRefundId(razorpayRefundId)
+                    .refundStatus(razorpayRefundStatus).payment(payment)
+                    .amount(payment.getAmount()).reason(reason).build();
+
+            //save refund
+            refundRepository.save(refund);
+
+            //save payment
+            payment.setPaymentStatus(PaymentStatus.REFUNDED);
+            paymentRepository.save(payment);
+            log.info("Refund successful for payment with id: {}", payment.getId());
+        }catch (RazorpayException e) {
+            log.info("Razorpay Refund Failed for payment with id: {}", payment.getId(), e);
+            throw new RuntimeException("Refund Failed", e);
+        }
+
     }
 }

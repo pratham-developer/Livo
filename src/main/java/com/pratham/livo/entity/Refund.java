@@ -30,6 +30,9 @@ public class Refund {
     private BigDecimal amount;
 
     @Column(nullable = false)
+    private String reason;
+
+    @Column(nullable = false)
     private String refundStatus;
 
     @CreationTimestamp

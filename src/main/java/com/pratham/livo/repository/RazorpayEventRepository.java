@@ -12,8 +12,8 @@ public interface RazorpayEventRepository extends JpaRepository<RazorpayEvent,Str
 
     @Modifying
     @Query(value = """
-        INSERT INTO razorpay_event (event_id, picked, created_at)
-        VALUES (:eventId, true, NOW())
+        INSERT INTO razorpay_event (event_id, created_at)
+        VALUES (:eventId, NOW())
         ON CONFLICT (event_id) DO NOTHING
     """, nativeQuery = true)
     int storeEvent(@Param("eventId") String eventId);
