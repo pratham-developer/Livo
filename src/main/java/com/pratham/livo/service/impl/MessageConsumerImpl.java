@@ -96,7 +96,7 @@ public class MessageConsumerImpl implements MessageConsumer {
                 payment.setRazorpayPaymentId(refundMessage.getRazorpayPaymentId());
             }
             //initiate refund
-            paymentService.initiateRefund(payment,refundMessage.getReason());
+            paymentService.initiateRefund(payment,refundMessage.getReason(),refundMessage.getPercentage());
         }catch (Exception e){
             throw new RuntimeException(e);
         }
@@ -121,6 +121,7 @@ public class MessageConsumerImpl implements MessageConsumer {
         email.setSender(new SendSmtpEmailSender().email(fromEmail).name(fromName));
         email.setTo(Collections.singletonList(new SendSmtpEmailTo().email(emailMessage.getTo())));
 
+        
         email.setSubject(emailMessage.getSubject());
         email.setHtmlContent(emailMessage.getHtmlContent());
 

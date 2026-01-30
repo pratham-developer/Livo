@@ -33,5 +33,4 @@ public class BookingResponseDto {
     private LocalDateTime updatedAt;
     private BookingStatus bookingStatus;
     private Set<GetGuestDto> guests;
-    private String idempotencyKey;
 }

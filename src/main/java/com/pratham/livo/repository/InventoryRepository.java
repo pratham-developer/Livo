@@ -136,7 +136,7 @@ public interface InventoryRepository extends JpaRepository<Inventory,Long> {
             i.date BETWEEN :startDate AND :endDate
             ORDER BY i.date ASC
             """)
-    List<Inventory> findInventoriesForBookingConfirmation(@Param("roomId") Long roomId,
+    List<Inventory> findInventoriesForBooking(@Param("roomId") Long roomId,
                                               @Param("startDate") LocalDate startDate,
                                               @Param("endDate") LocalDate endDate);
 }

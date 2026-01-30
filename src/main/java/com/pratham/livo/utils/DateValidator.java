@@ -25,4 +25,12 @@ public class DateValidator{
         }
         return days;
     }
+
+    public long countDaysToBooking(LocalDate startDate){
+        //date validation
+        if (!startDate.isAfter(LocalDate.now())) {
+            throw new BadRequestException("Booking start date cannot be in the past or present");
+        }
+        return ChronoUnit.DAYS.between(LocalDate.now(), startDate);
+    }
 }

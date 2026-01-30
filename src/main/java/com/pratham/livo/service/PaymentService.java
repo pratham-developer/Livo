@@ -12,5 +12,5 @@ public interface PaymentService {
     boolean verifyPaymentFromClient(PaymentVerifyRequestDto paymentVerifyRequestDto);
     void processWebhook(String payload, String webhookSignature, String eventId);
     void confirmPaymentSuccess(Payment payment, String razorpayPaymentId, String razorpaySignature);
-    void initiateRefund(Payment payment, String reason);
+    void initiateRefund(Payment payment, String reason, int percentage);
 }

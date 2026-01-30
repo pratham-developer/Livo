@@ -1,6 +1,7 @@
 package com.pratham.livo.service.impl;
 
 import com.pratham.livo.config.RazorpayConfig;
+import com.pratham.livo.dto.auth.AuthenticatedUser;
 import com.pratham.livo.dto.message.PaymentMessage;
 import com.pratham.livo.dto.message.RefundMessage;
 import com.pratham.livo.dto.message.RefundUpdateMessage;
@@ -13,7 +14,9 @@ import com.pratham.livo.enums.BookingStatus;
 import com.pratham.livo.enums.PaymentStatus;
 import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.ResourceNotFoundException;
+import com.pratham.livo.exception.SessionNotFoundException;
 import com.pratham.livo.repository.*;
+import com.pratham.livo.security.SecurityHelper;
 import com.pratham.livo.service.MessagePublisher;
 import com.pratham.livo.service.PaymentService;
 import com.pratham.livo.utils.IdempotencyUtil;
@@ -22,10 +25,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.json.JSONObject;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.UUID;
 
@@ -44,6 +49,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final RazorpayEventRepository razorpayEventRepository;
     private final MessagePublisher messagePublisher;
     private final RefundRepository refundRepository;
+    private final SecurityHelper securityHelper;
 
     @Override
     @Transactional
@@ -61,6 +67,8 @@ public class PaymentServiceImpl implements PaymentService {
         //find booking
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(()->new ResourceNotFoundException("Booking not found"));
+
+        verifyBookingOwner(booking);
 
         //ensure booking status to allow new payment or retry payment
         if(booking.getBookingStatus()!=BookingStatus.GUESTS_ADDED &&
@@ -116,7 +124,11 @@ public class PaymentServiceImpl implements PaymentService {
             return PaymentInitResponseDto.builder()
                     .bookingId(booking.getId()).amount(booking.getAmount())
                     .currency("INR").razorpayOrderId(razorpayOrderId)
-                    .razorpayKeyId(razorpayConfig.getKeyId()).build();
+                    .razorpayKeyId(razorpayConfig.getKeyId())
+                    .companyName("Livo")
+                    .description("Booking #"+booking.getId())
+                    .userEmail(currentUser().getEmail())
+                    .build();
 
         } catch (RazorpayException e) {
             log.error("Razorpay Order Creation Failed", e);
@@ -131,6 +143,8 @@ public class PaymentServiceImpl implements PaymentService {
         //get the payment record for the razorpay order id
         Payment payment = paymentRepository.findByRazorpayOrderId(paymentVerifyRequestDto.getRazorpayOrderId())
                 .orElseThrow(()->new ResourceNotFoundException("Payment record not found"));
+
+        verifyBookingOwner(payment.getBooking());
 
         //if already successful then return (due to webhook) -> idempotency
         if(payment.getPaymentStatus() == PaymentStatus.SUCCESSFUL){
@@ -188,12 +202,12 @@ public class PaymentServiceImpl implements PaymentService {
             return;
         }
 
-        if(booking.getBookingStatus() == BookingStatus.EXPIRED){
+        if(booking.getBookingStatus() == BookingStatus.EXPIRED || booking.getBookingStatus() == BookingStatus.CANCELLED){
             //handle async refund
             RefundMessage refundMessage = RefundMessage.builder()
                     .razorpayOrderId(payment.getRazorpayOrderId())
-                            .razorpayPaymentId(razorpayPaymentId).reason("Booking Expired")
-                            .build();
+                    .razorpayPaymentId(razorpayPaymentId).reason("Booking Expired")
+                    .percentage(100).build();
             messagePublisher.publishRefund(refundMessage);
             log.info("Late payment received for Expired Booking ID: {}", booking.getId());
             throw new BadRequestException("Booking has expired. Payment will be refunded.");
@@ -210,7 +224,7 @@ public class PaymentServiceImpl implements PaymentService {
             bookingRepository.save(booking);
 
             //get inventory list to be updated
-            List<Inventory> inventoryList = inventoryRepository.findInventoriesForBookingConfirmation(
+            List<Inventory> inventoryList = inventoryRepository.findInventoriesForBooking(
                     booking.getRoom().getId(),
                     booking.getStartDate(),
                     booking.getEndDate()
@@ -232,7 +246,7 @@ public class PaymentServiceImpl implements PaymentService {
             RefundMessage refundMessage = RefundMessage.builder()
                     .razorpayOrderId(payment.getRazorpayOrderId())
                     .razorpayPaymentId(razorpayPaymentId).reason("Room Unavailable (Race Condition)")
-                    .build();
+                    .percentage(100).build();
             messagePublisher.publishRefund(refundMessage);
             log.info("Race condition detected for Booking ID: {}", booking.getId());
             throw new BadRequestException("Booking was not completed. Payment will be refunded.");
@@ -295,7 +309,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     //helper method, to be used inside a method which uses @transactional
     @Override
-    public void initiateRefund(Payment payment, String reason) {
+    public void initiateRefund(Payment payment, String reason, int percentage) {
         log.info("Initiating refund for payment with id: {}",payment.getId());
         //if already refunded then return
         if(payment.getPaymentStatus() == PaymentStatus.REFUNDED){
@@ -312,10 +326,23 @@ public class PaymentServiceImpl implements PaymentService {
             throw new BadRequestException("Cannot refund without razorpayPaymentId");
         }
 
+        //check percentage
+        if(percentage<=0 || percentage>100){
+            return;
+        }
+
         try{
+            //get refund amount
+            BigDecimal refundFactor = BigDecimal.valueOf(percentage)
+                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            BigDecimal refundAmount = payment.getAmount().multiply(refundFactor);
+
+            //in paise
+            long refundAmountInPaise = refundAmount.multiply(BigDecimal.valueOf(100)).longValue();
+
             //build refund request
             JSONObject refundRequest = new JSONObject();
-            refundRequest.put("amount",payment.getAmount().multiply(BigDecimal.valueOf(100)).longValue());
+            refundRequest.put("amount",refundAmountInPaise);
             refundRequest.put("speed","optimum");
 
             //add note for reason
@@ -332,7 +359,7 @@ public class PaymentServiceImpl implements PaymentService {
             com.pratham.livo.entity.Refund refund = com.pratham.livo.entity.Refund
                     .builder().razorpayRefundId(razorpayRefundId)
                     .refundStatus(razorpayRefundStatus).payment(payment)
-                    .amount(payment.getAmount()).reason(reason).build();
+                    .amount(refundAmount).reason(reason).build();
 
             //save refund
             refundRepository.save(refund);
@@ -346,5 +373,18 @@ public class PaymentServiceImpl implements PaymentService {
             throw new RuntimeException("Refund Failed", e);
         }
 
+    }
+
+    private AuthenticatedUser currentUser() {
+        return securityHelper.getCurrentAuthenticatedUser()
+                .orElseThrow(() -> new SessionNotFoundException("Cannot identify the authenticated user"));
+    }
+
+    private void verifyBookingOwner(Booking booking){
+        //check if booking belongs to the authenticated user
+        AuthenticatedUser authenticatedUser = currentUser();
+        if(!authenticatedUser.getId().equals(booking.getUser().getId())){
+            throw new AccessDeniedException("Booking does not belong to the authenticated user");
+        }
     }
 }

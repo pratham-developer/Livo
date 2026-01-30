@@ -10,6 +10,7 @@ public interface BookingService {
     BookingResponseDto initBooking(BookingRequestDto bookingRequestDto);
     BookingResponseDto addGuests(Long bookingId, List<AddGuestDto> guestDtoList);
     void cleanExpiredBookings();
+    BookingResponseDto cancelBooking(Long bookingId);
 
     //TODO: implement dynamic pricing strategy using decorator pattern
 

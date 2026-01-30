@@ -30,4 +30,10 @@ public class BookingController {
         log.info("Attempting to add guests to booking with id: {}",bookingId);
         return ResponseEntity.ok(bookingService.addGuests(bookingId,guestDtoList));
     }
+
+    @PostMapping("/{bookingId}/cancel")
+    public ResponseEntity<BookingResponseDto> cancelBooking(@PathVariable Long bookingId){
+        log.info("Attempting to cancel booking with id: {}",bookingId);
+        return ResponseEntity.ok(bookingService.cancelBooking(bookingId));
+    }
 }

@@ -13,4 +13,5 @@ public class RefundMessage {
     private String razorpayOrderId;
     private String razorpayPaymentId;
     private String reason;
+    private int percentage;
 }

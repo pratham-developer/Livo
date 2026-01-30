@@ -17,4 +17,7 @@ public class PaymentInitResponseDto {
     private String currency;
     private String razorpayOrderId;
     private String razorpayKeyId;
+    private String companyName;
+    private String description;
+    private String userEmail;
 }

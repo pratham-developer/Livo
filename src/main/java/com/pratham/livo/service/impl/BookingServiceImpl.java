@@ -5,8 +5,10 @@ import com.pratham.livo.dto.booking.AddGuestDto;
 import com.pratham.livo.dto.booking.BookingResponseDto;
 import com.pratham.livo.dto.booking.BookingRequestDto;
 import com.pratham.livo.dto.booking.GetGuestDto;
+import com.pratham.livo.dto.message.RefundMessage;
 import com.pratham.livo.entity.*;
 import com.pratham.livo.enums.BookingStatus;
+import com.pratham.livo.enums.PaymentStatus;
 import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.InventoryBusyException;
 import com.pratham.livo.exception.ResourceNotFoundException;
@@ -15,6 +17,7 @@ import com.pratham.livo.repository.*;
 import com.pratham.livo.security.SecurityHelper;
 import com.pratham.livo.service.BookingService;
 import com.pratham.livo.service.InventoryService;
+import com.pratham.livo.service.MessagePublisher;
 import com.pratham.livo.utils.DateValidator;
 import com.pratham.livo.utils.IdempotencyUtil;
 import jakarta.persistence.EntityManager;
@@ -31,6 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -56,6 +60,8 @@ public class BookingServiceImpl implements BookingService {
     private final static long BOOKING_SESSION_TIME_LIMIT = 10L; //in minutes
     private final static String KEY_PREFIX = "booking:idempotency:";
     private final IdempotencyUtil idempotencyUtil;
+    private final PaymentRepository paymentRepository;
+    private final MessagePublisher messagePublisher;
 
     @Override
     @Transactional
@@ -129,7 +135,7 @@ public class BookingServiceImpl implements BookingService {
         Booking savedBooking = bookingRepository.save(booking);
         log.info("Booking initialized with ID: {}", savedBooking.getId());
 
-        return getBookingResponseDto(savedBooking, idempotencyKey);
+        return getBookingResponseDto(savedBooking);
     }
 
     @Override
@@ -189,7 +195,7 @@ public class BookingServiceImpl implements BookingService {
         //save booking
         Booking savedBooking = bookingRepository.save(booking);
 
-        BookingResponseDto bookingResponseDto = getBookingResponseDto(savedBooking, null);
+        BookingResponseDto bookingResponseDto = getBookingResponseDto(savedBooking);
 
         Set<GetGuestDto> getGuestDtoSet = new HashSet<>();
         for(Guest guest : savedBooking.getGuests()){
@@ -198,6 +204,7 @@ public class BookingServiceImpl implements BookingService {
             getGuestDtoSet.add(getGuestDto);
         }
         bookingResponseDto.setGuests(getGuestDtoSet);
+        log.info("Guests successfully added to booking with id: {}",bookingId);
         return bookingResponseDto;
 
     }
@@ -297,12 +304,77 @@ public class BookingServiceImpl implements BookingService {
         }
     }
 
+    @Override
+    @Transactional
+    public BookingResponseDto cancelBooking(Long bookingId) {
+        log.info("Cancelling booking with id: {}",bookingId);
+        //check if booking exists
+        Booking booking = bookingRepository.findById(bookingId).orElseThrow(
+                ()->new ResourceNotFoundException("Booking not found with id: "+bookingId)
+        );
+
+        verifyBookingOwner(booking);
+
+        if(booking.getBookingStatus() == BookingStatus.CANCELLED){
+            log.info("Booking with id: {} is already cancelled",bookingId);
+            return getBookingResponseDto(booking);
+        }
+
+        //ensure booking is confirmed
+        if(booking.getBookingStatus()!=BookingStatus.CONFIRMED){
+            throw new BadRequestException("Booking is not in confirmed state");
+        }
+
+        //get payment for booking
+        Payment payment = paymentRepository.findByBooking(booking).orElseThrow(
+                ()->new ResourceNotFoundException("Payment not found for booking with id: "+bookingId)
+        );
+
+        //ensure payment is in successful state
+        if(payment.getPaymentStatus()!=PaymentStatus.SUCCESSFUL){
+            throw new BadRequestException("Payment is not in successful state");
+        }
+
+        //update booking
+        booking.setBookingStatus(BookingStatus.CANCELLED);
+
+        //get inventory list to be updated
+        List<Inventory> inventoryList = inventoryRepository.findInventoriesForBooking(
+                booking.getRoom().getId(),
+                booking.getStartDate(),
+                booking.getEndDate()
+        );
+
+        for(Inventory i : inventoryList){
+            //remove rooms from booked count
+            int booked = i.getBookedCount()-booking.getRoomsCount();
+            i.setBookedCount(Math.max(0,booked));
+        }
+
+        //save booking
+        Booking savedBooking = bookingRepository.save(booking);
+
+        //save inventory list
+        inventoryRepository.saveAllAndFlush(inventoryList);
+
+        //initiate refund
+        RefundMessage refundMessage = RefundMessage.builder()
+                .razorpayOrderId(payment.getRazorpayOrderId())
+                .razorpayPaymentId(payment.getRazorpayPaymentId())
+                .reason("User Manually Cancelled Booking")
+                .percentage(calculateRefundPercentage(booking.getStartDate()))
+                .build();
+        messagePublisher.publishRefund(refundMessage);
+        log.info("Successfully cancelled booking with id: {}",bookingId);
+        return getBookingResponseDto(savedBooking);
+    }
+
     private AuthenticatedUser currentUser() {
         return securityHelper.getCurrentAuthenticatedUser()
                 .orElseThrow(() -> new SessionNotFoundException("Cannot identify the authenticated user"));
     }
 
-    private BookingResponseDto getBookingResponseDto(Booking savedBooking, String idempotencyKey) {
+    private BookingResponseDto getBookingResponseDto(Booking savedBooking) {
         BookingResponseDto bookingResponseDto = modelMapper.map(savedBooking, BookingResponseDto.class);
         bookingResponseDto.setHotelId(savedBooking.getHotel().getId());
         bookingResponseDto.setRoomId(savedBooking.getRoom().getId());
@@ -310,7 +382,6 @@ public class BookingServiceImpl implements BookingService {
         bookingResponseDto.setHotelName(savedBooking.getHotel().getName());
         bookingResponseDto.setRoomType(savedBooking.getRoom().getType());
         bookingResponseDto.setHotelCity(savedBooking.getHotel().getCity());
-        bookingResponseDto.setIdempotencyKey(idempotencyKey);
         return bookingResponseDto;
 
     }
@@ -325,5 +396,12 @@ public class BookingServiceImpl implements BookingService {
         if(!authenticatedUser.getId().equals(booking.getUser().getId())){
             throw new AccessDeniedException("Booking does not belong to the authenticated user");
         }
+    }
+
+    private int calculateRefundPercentage(LocalDate startDate){
+        long daysLeft = dateValidator.countDaysToBooking(startDate);
+        if(daysLeft==1) return 50;
+        if(daysLeft==2) return 75;
+        return 100;
     }
 }
