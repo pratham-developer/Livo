@@ -1,5 +1,6 @@
 package com.pratham.livo.controller;
 
+import com.pratham.livo.dto.hotel.BestHotelsResponseDto;
 import com.pratham.livo.dto.hotel.HotelInfoDto;
 import com.pratham.livo.dto.hotel.HotelSearchRequestDto;
 import com.pratham.livo.dto.hotel.HotelSearchResponseDto;
@@ -11,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.List;
 
 
 @RestController
@@ -47,5 +49,12 @@ public class HotelBrowseController {
             ){
         log.info("Attempting to fetch hotel info with id: {}",hotelId);
         return ResponseEntity.ok(hotelService.getHotelInfo(hotelId,startDate,endDate,roomsCount));
+    }
+
+    @GetMapping("/best")
+    public ResponseEntity<List<BestHotelsResponseDto>> getBestHotels(
+    ){
+        log.info("Attempting to fetch best hotels");
+        return ResponseEntity.ok(hotelService.getBestHotels());
     }
 }

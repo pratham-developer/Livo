@@ -17,7 +17,8 @@ import java.util.List;
 @Table(
         indexes = {
                 //for searching hotel by owner id
-                @Index(name = "idx_hotel_owner", columnList = "owner_id")
+                @Index(name = "idx_hotel_owner", columnList = "owner_id"),
+                @Index(name = "idx_hotel_popularity", columnList = "active, deleted, popularityScore DESC")
         }
 )
 public class Hotel {
@@ -75,6 +76,9 @@ public class Hotel {
     @JoinColumn(nullable = false)//M:1 mapping for hotel-user(owner)
     @ToString.Exclude
     private User owner;
+
+    @Column(nullable = false)
+    private Double popularityScore = 0.0;
 
 
 }

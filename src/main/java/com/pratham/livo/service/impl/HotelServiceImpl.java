@@ -6,9 +6,11 @@ import com.pratham.livo.dto.room.RoomResponseDto;
 import com.pratham.livo.entity.Hotel;
 import com.pratham.livo.entity.Room;
 import com.pratham.livo.entity.User;
+import com.pratham.livo.enums.BookingStatus;
 import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.ResourceNotFoundException;
 import com.pratham.livo.exception.SessionNotFoundException;
+import com.pratham.livo.projection.HotelWrapper;
 import com.pratham.livo.projection.PriceCheckWrapper;
 import com.pratham.livo.projection.RoomAvailabilityWrapper;
 import com.pratham.livo.repository.BookingRepository;
@@ -23,10 +25,12 @@ import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PagedModel;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,6 +57,9 @@ public class HotelServiceImpl implements HotelService {
     private final SecurityHelper securityHelper;
     private final EntityManager entityManager;
     public static final int MAX_HOTELS_PER_OWNER = 10;
+
+    @Value("${count.best.hotels}")
+    private int COUNT_BEST_HOTELS;
 
     @Override
     @Transactional
@@ -306,6 +313,31 @@ public class HotelServiceImpl implements HotelService {
                 .hotel(modelMapper.map(hotel,HotelResponseDto.class))
                 .rooms(roomResponseDtos)
                 .build();
+    }
+
+    @Override
+    @Scheduled(cron = "0 0 4 * * *")
+    @Transactional
+    public void updatePopularityOfActiveHotels() {
+        log.info("CRON JOB START: Updating Hotel Popularity Scores");
+        try {
+            hotelRepository.updatePopularityOfActiveHotels(BookingStatus.CONFIRMED.name());
+            log.info("CRON JOB SUCCESS: Popularity Scores Updated");
+        } catch (Exception e) {
+            log.error("CRON JOB FAILED: error updating popularity scores", e);
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<BestHotelsResponseDto> getBestHotels() {
+        log.info("Fetching best hotels");
+        Pageable pageable = PageRequest.of(0,COUNT_BEST_HOTELS);
+        List<HotelWrapper> hotelWrapperList = hotelRepository.findBestHotels(pageable);
+        log.info("Successfully fetched best hotels");
+        return hotelWrapperList.stream()
+                .map(hotelWrapper -> modelMapper.map(hotelWrapper, BestHotelsResponseDto.class))
+                .toList();
     }
 
     private void verifyHotelOwner(Hotel hotel){
