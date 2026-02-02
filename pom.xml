@@ -124,6 +124,21 @@
             <artifactId>razorpay-java</artifactId>
             <version>1.4.8</version>
         </dependency>
+        <dependency>
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson-spring-boot-starter</artifactId>
+            <version>4.1.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j_jdk17-redisson</artifactId> <version>8.16.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j_jdk17-core</artifactId> <version>8.16.0</version>
+        </dependency>
 
     </dependencies>
 

@@ -2,6 +2,7 @@ package com.pratham.livo.advice;
 
 import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.InventoryBusyException;
+import com.pratham.livo.exception.RateLimitExceededException;
 import com.pratham.livo.exception.ResourceNotFoundException;
 import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +18,16 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    //handle rate limit exceeded exception
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ApiResponse<?>> handleRateLimitExceededException(RateLimitExceededException exception){
+        ApiError apiError = ApiError.builder()
+                .status(HttpStatus.TOO_MANY_REQUESTS)
+                .message("Too many requests. Please try again in " + exception.getRetryAfterSeconds() + " seconds.")
+                .build();
+        return buildErrorResponseEntity(apiError);
+    }
 
     //handle access denied failures
     @ExceptionHandler(AccessDeniedException.class)
