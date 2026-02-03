@@ -1,2 +1,11 @@
-application.properties
-application.yml
+# Local config with real secrets (DO NOT COMMIT)
+application-local.properties
+application-local.yml
+
+# Environment-specific configs
+application-prod.properties
+application-prod.yml
+
+# Other secrets
+*.env
+.env

@@ -1,0 +1,28 @@
+jwt:
+  access:
+    secret: ${JWT_ACCESS_SECRET}
+    expiry: 600000
+  refresh:
+    secret: ${JWT_REFRESH_SECRET}
+    expiry: 15552000000
+    hash:
+      key: ${JWT_REFRESH_HASH_KEY}
+
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      username: ${REDIS_USERNAME}
+      password: ${REDIS_PASSWORD}
+      timeout: 5s
+      ssl:
+        enabled: ${REDIS_SSL_ENABLED}
+      client-type: lettuce
+
+livo:
+  ratelimit:
+    enabled: true
+    capacity: 50
+    refill-tokens: 50
+    refill-duration: 60
