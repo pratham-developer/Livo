@@ -46,10 +46,9 @@ jobs:
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          # FIX: Use the specific SHA tag here to force Azure to update
           images: ${{ env.REGISTRY }}/${{ steps.lowercase.outputs.IMAGE_NAME_LOWER }}:${{ github.sha }}
 
       - name: Deployment summary
         run: |
           echo "✅ Deployment completed successfully!"
-          echo "🚀 Your app is live at: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"
+          echo "🚀 Your app is live."

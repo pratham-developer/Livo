@@ -1,10 +1,7 @@
 package com.pratham.livo.service.impl;
 
 import com.pratham.livo.dto.auth.AuthenticatedUser;
-import com.pratham.livo.dto.booking.AddGuestDto;
-import com.pratham.livo.dto.booking.BookingResponseDto;
-import com.pratham.livo.dto.booking.BookingRequestDto;
-import com.pratham.livo.dto.booking.GetGuestDto;
+import com.pratham.livo.dto.booking.*;
 import com.pratham.livo.dto.message.RefundMessage;
 import com.pratham.livo.entity.*;
 import com.pratham.livo.enums.BookingStatus;
@@ -13,6 +10,7 @@ import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.InventoryBusyException;
 import com.pratham.livo.exception.ResourceNotFoundException;
 import com.pratham.livo.exception.SessionNotFoundException;
+import com.pratham.livo.projection.BookingWrapper;
 import com.pratham.livo.repository.*;
 import com.pratham.livo.security.SecurityHelper;
 import com.pratham.livo.service.BookingService;
@@ -25,8 +23,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
 import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PagedModel;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -367,6 +368,38 @@ public class BookingServiceImpl implements BookingService {
         messagePublisher.publishRefund(refundMessage);
         log.info("Successfully cancelled booking with id: {}",bookingId);
         return getBookingResponseDto(savedBooking);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PagedModel<BookingWrapperDto> getMyBookings(Integer page, Integer size) {
+        //get the authenticated user
+        AuthenticatedUser user = currentUser();
+
+        //get bookings page for the user
+        Pageable pageable = PageRequest.of(page,size,
+                Sort.by("startDate").descending()
+                        .and(Sort.by("endDate").descending()));
+
+        List<BookingStatus> statusList = List.of(BookingStatus.CONFIRMED,BookingStatus.CANCELLED);
+        Page<BookingWrapper> bookingWrappers = bookingRepository.findMyBookings(
+                user.getId(),statusList,pageable);
+
+        Page<BookingWrapperDto> dtoPage = bookingWrappers
+                .map(bookingWrapper -> modelMapper.map(bookingWrapper, BookingWrapperDto.class));
+
+        return new PagedModel<>(dtoPage);
+
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BookingResponseDto getBookingById(Long bookingId) {
+        Booking booking = bookingRepository.findByIdWithGuests(bookingId).orElseThrow(
+                ()->new ResourceNotFoundException("Booking not found with id: "+bookingId)
+        );
+        verifyBookingOwner(booking);
+        return getBookingResponseDto(booking);
     }
 
     private AuthenticatedUser currentUser() {
