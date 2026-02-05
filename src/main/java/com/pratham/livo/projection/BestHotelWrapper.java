@@ -9,7 +9,7 @@ import java.util.List;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class HotelWrapper {
+public class BestHotelWrapper {
     private Long id;
     private String name;
     private String city;

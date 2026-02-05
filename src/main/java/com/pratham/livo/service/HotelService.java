@@ -15,5 +15,7 @@ public interface HotelService {
     PagedModel<HotelSearchResponseDto> searchHotels(HotelSearchRequestDto hotelSearchRequestDto, Integer page, Integer size);
     HotelInfoDto getHotelInfo(Long id, LocalDate startDate, LocalDate endDate, Integer roomsCount);
     void updatePopularityOfActiveHotels();
-    List<BestHotelsResponseDto> getBestHotels();
+    List<HotelResponseDto> getBestHotels();
+
+    PagedModel<HotelResponseDto> getHotelsForHotelManager(Integer page, Integer size);
 }

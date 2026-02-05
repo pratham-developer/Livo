@@ -10,7 +10,8 @@ import com.pratham.livo.enums.BookingStatus;
 import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.ResourceNotFoundException;
 import com.pratham.livo.exception.SessionNotFoundException;
-import com.pratham.livo.projection.HotelWrapper;
+import com.pratham.livo.projection.BestHotelWrapper;
+import com.pratham.livo.projection.ManagersHotelWrapper;
 import com.pratham.livo.projection.PriceCheckWrapper;
 import com.pratham.livo.projection.RoomAvailabilityWrapper;
 import com.pratham.livo.repository.BookingRepository;
@@ -29,6 +30,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PagedModel;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.access.AccessDeniedException;
@@ -330,14 +332,27 @@ public class HotelServiceImpl implements HotelService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<BestHotelsResponseDto> getBestHotels() {
+    public List<HotelResponseDto> getBestHotels() {
         log.info("Fetching best hotels");
-        Pageable pageable = PageRequest.of(0,COUNT_BEST_HOTELS);
-        List<HotelWrapper> hotelWrapperList = hotelRepository.findBestHotels(pageable);
+        Pageable pageable = PageRequest.of(0,COUNT_BEST_HOTELS,
+                Sort.by("popularityScore").descending());
+        List<BestHotelWrapper> bestHotelWrapperList = hotelRepository.findBestHotels(pageable);
         log.info("Successfully fetched best hotels");
-        return hotelWrapperList.stream()
-                .map(hotelWrapper -> modelMapper.map(hotelWrapper, BestHotelsResponseDto.class))
+        return bestHotelWrapperList.stream()
+                .map(bestHotelWrapper -> modelMapper.map(bestHotelWrapper, HotelResponseDto.class))
                 .toList();
+    }
+
+    @Override
+    public PagedModel<HotelResponseDto> getHotelsForHotelManager(Integer page, Integer size) {
+        log.info("Retrieving hotels for a hotel manager");
+        AuthenticatedUser user = currentUser();
+        Pageable pageable = PageRequest.of(page, size, Sort.by("updatedAt").descending());
+        Page<ManagersHotelWrapper> wrappers = hotelRepository.findManagersHotels(user.getId(),pageable);
+        Page<HotelResponseDto> hotels = wrappers.map(
+                wrapper -> modelMapper.map(wrapper, HotelResponseDto.class));
+        log.info("Successfully retrieved hotels for a hotel manager");
+        return new PagedModel<>(hotels);
     }
 
     private void verifyHotelOwner(Hotel hotel){

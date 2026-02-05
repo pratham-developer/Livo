@@ -1,9 +1,6 @@
 package com.pratham.livo.controller;
 
-import com.pratham.livo.dto.hotel.BestHotelsResponseDto;
-import com.pratham.livo.dto.hotel.HotelInfoDto;
-import com.pratham.livo.dto.hotel.HotelSearchRequestDto;
-import com.pratham.livo.dto.hotel.HotelSearchResponseDto;
+import com.pratham.livo.dto.hotel.*;
 import com.pratham.livo.service.HotelService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -52,7 +49,7 @@ public class HotelBrowseController {
     }
 
     @GetMapping("/best")
-    public ResponseEntity<List<BestHotelsResponseDto>> getBestHotels(
+    public ResponseEntity<List<HotelResponseDto>> getBestHotels(
     ){
         log.info("Attempting to fetch best hotels");
         return ResponseEntity.ok(hotelService.getBestHotels());

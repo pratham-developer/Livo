@@ -44,7 +44,7 @@ public class BookingController {
             @RequestParam(defaultValue = "0") Integer page,
             @RequestParam(defaultValue = "10") Integer size
     ){
-        log.info("Attempting to get bookings");
+        log.info("Attempting to get bookings for a user");
         return ResponseEntity.ok(bookingService.getMyBookings(page,Math.min(size,100)));
     }
 

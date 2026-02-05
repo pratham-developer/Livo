@@ -373,6 +373,7 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional(readOnly = true)
     public PagedModel<BookingWrapperDto> getMyBookings(Integer page, Integer size) {
+        log.info("Fetching bookings for a user");
         //get the authenticated user
         AuthenticatedUser user = currentUser();
 
@@ -387,7 +388,7 @@ public class BookingServiceImpl implements BookingService {
 
         Page<BookingWrapperDto> dtoPage = bookingWrappers
                 .map(bookingWrapper -> modelMapper.map(bookingWrapper, BookingWrapperDto.class));
-
+        log.info("Successfully fetched bookings for a user");
         return new PagedModel<>(dtoPage);
 
     }
@@ -395,10 +396,12 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional(readOnly = true)
     public BookingResponseDto getBookingById(Long bookingId) {
+        log.info("Fetching booking with id: {}",bookingId);
         Booking booking = bookingRepository.findByIdWithGuests(bookingId).orElseThrow(
                 ()->new ResourceNotFoundException("Booking not found with id: "+bookingId)
         );
         verifyBookingOwner(booking);
+        log.info("Successfully fetched booking with id: {}",bookingId);
         return getBookingResponseDto(booking);
     }
 

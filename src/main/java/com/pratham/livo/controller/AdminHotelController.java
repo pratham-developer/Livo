@@ -5,6 +5,7 @@ import com.pratham.livo.dto.hotel.HotelResponseDto;
 import com.pratham.livo.service.HotelService;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.web.PagedModel;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -49,5 +50,14 @@ public class AdminHotelController {
         log.info("Attempting to activate hotel with id: {}",hotelId);
         hotelService.activateHotelById(hotelId);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping
+    public ResponseEntity<PagedModel<HotelResponseDto>> getMyHotels(
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "10") Integer size
+    ){
+        log.info("Attempting to get hotels for a hotel manager");
+        return ResponseEntity.ok(hotelService.getHotelsForHotelManager(page,Math.min(size,100)));
     }
 }

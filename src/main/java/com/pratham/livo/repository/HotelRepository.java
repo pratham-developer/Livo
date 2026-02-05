@@ -1,7 +1,9 @@
 package com.pratham.livo.repository;
 
 import com.pratham.livo.entity.Hotel;
-import com.pratham.livo.projection.HotelWrapper;
+import com.pratham.livo.projection.BestHotelWrapper;
+import com.pratham.livo.projection.ManagersHotelWrapper;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -32,10 +34,18 @@ public interface HotelRepository extends JpaRepository<Hotel,Long> {
 
 
     @Query("""
-            select new com.pratham.livo.projection.HotelWrapper(
+            select new com.pratham.livo.projection.BestHotelWrapper(
             h.id, h.name, h.city, h.photos) from Hotel h
             where h.active = true and h.deleted = false
-            order by h.popularityScore desc
             """)
-    List<HotelWrapper> findBestHotels(Pageable pageable);
+    List<BestHotelWrapper> findBestHotels(Pageable pageable);
+
+
+    @Query("""
+            select new com.pratham.livo.projection.ManagersHotelWrapper(
+            h.id, h.name, h.city, h.photos, h.active) from Hotel h
+            where h.owner.id = :userId and h.deleted = false
+            """)
+    Page<ManagersHotelWrapper> findManagersHotels(
+            @Param("userId") Long userId, Pageable pageable);
 }

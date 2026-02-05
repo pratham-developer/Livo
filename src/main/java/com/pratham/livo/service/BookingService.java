@@ -16,8 +16,6 @@ public interface BookingService {
     PagedModel<BookingWrapperDto> getMyBookings(Integer page, Integer size);
     BookingResponseDto getBookingById(Long bookingId);
 
-    //TODO: implement dynamic pricing strategy using decorator pattern
-
     /*
     TODO:
     1. whenever we open the homepage, an endpoint hits to fetch the last pending booking with option to continue it
