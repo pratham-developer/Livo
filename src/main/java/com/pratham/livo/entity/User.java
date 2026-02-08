@@ -44,6 +44,12 @@ public class User implements UserDetails {
     @ElementCollection(fetch = FetchType.EAGER)
     @Enumerated(value = EnumType.STRING) //stores actual name of enum as string
     //EnumType.ORDINAL stores 0,1,2 etc. instead of actual name
+    @CollectionTable(
+            name = "user_roles",
+            joinColumns = @JoinColumn(name = "user_id"),
+            uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "role"})
+    )
+    @Column(name = "role")
     @ToString.Exclude
     private Set<Role> roles;
     //one to many mapping is done in the background
