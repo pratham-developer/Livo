@@ -139,4 +139,39 @@ public interface InventoryRepository extends JpaRepository<Inventory,Long> {
     List<Inventory> findInventoriesForBooking(@Param("roomId") Long roomId,
                                               @Param("startDate") LocalDate startDate,
                                               @Param("endDate") LocalDate endDate);
+
+
+
+    //for deleting older inventory than today
+    @Modifying
+    @Query(value = "DELETE FROM inventory WHERE date < :today", nativeQuery = true)
+    void deleteOldInventory(@Param("today") LocalDate today);
+
+    //for adding inventory for the target date
+    @Modifying
+    @Query(value = """
+        INSERT INTO inventory (
+            id,
+            created_at, updated_at, date, total_count,
+            booked_count, reserved_count, price,
+            surge_factor, closed, city, hotel_id, room_id
+        )
+        SELECT
+            nextval('inventory_seq'),
+            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, :targetDate, r.total_count,
+            0, 0, r.base_price, 1.0, false, h.city, h.id, r.id
+        FROM room r
+        JOIN hotel h ON r.hotel_id = h.id
+        WHERE
+            r.active = true AND r.deleted = false
+            AND h.active = true AND h.deleted = false
+            AND NOT EXISTS (
+                SELECT 1
+                FROM inventory i
+                WHERE i.room_id = r.id
+                AND i.hotel_id = h.id
+                AND i.date = :targetDate
+            )
+        """, nativeQuery = true)
+    void createInventoryForDate(@Param("targetDate") LocalDate targetDate);
 }

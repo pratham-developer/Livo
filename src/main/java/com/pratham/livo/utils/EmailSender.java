@@ -5,13 +5,13 @@ import com.pratham.livo.dto.message.EmailMessage;
 import com.pratham.livo.service.MessagePublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 import java.util.Map;
 
 @Slf4j
-@Service
+@Component
 @RequiredArgsConstructor
 public class EmailSender {
 

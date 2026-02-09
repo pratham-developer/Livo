@@ -11,5 +11,6 @@ public interface InventoryService {
     BigDecimal calculateTotalAmount(List<Inventory> inventoryList);
     BigDecimal calculateAveragePrice(List<Inventory> inventoryList);
 
-    //TODO: implement cron job(daily) for removing old inventories and adding inventories for the next day
+    //cron job(daily) for removing old inventories and adding inventories for the next day
+    void runDailyInventoryRoll(); //cron job
 }

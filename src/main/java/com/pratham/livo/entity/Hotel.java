@@ -77,8 +77,7 @@ public class Hotel {
     @ToString.Exclude
     private User owner;
 
+    @Builder.Default
     @Column(nullable = false)
     private Double popularityScore = 0.0;
-
-
 }

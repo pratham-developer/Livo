@@ -3,9 +3,12 @@ package com.pratham.livo.service.impl;
 import com.pratham.livo.entity.Inventory;
 import com.pratham.livo.entity.Room;
 import com.pratham.livo.repository.InventoryRepository;
+import com.pratham.livo.service.InventoryMaintainer;
 import com.pratham.livo.service.InventoryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +24,7 @@ import java.util.List;
 public class InventoryServiceImpl implements InventoryService {
 
     private final InventoryRepository inventoryRepository;
+    private final InventoryMaintainer inventoryMaintainer;
 
     @Override
     @Transactional
@@ -62,5 +66,27 @@ public class InventoryServiceImpl implements InventoryService {
             return BigDecimal.ZERO;
         }
         return total.divide(BigDecimal.valueOf(inventoryList.size()), 2, RoundingMode.HALF_UP);
+    }
+
+    @Override
+    @Scheduled(cron = "0 0 2 * * *")
+    @SchedulerLock(
+            name = "dailyInventoryRollTask",
+            lockAtLeastFor = "PT1M",
+            lockAtMostFor = "PT10M"
+    )
+    public void runDailyInventoryRoll() {
+        log.info("SCHEDULER: triggering daily inventory rollover");
+        try{
+            long start = System.currentTimeMillis();
+
+            //start inventory maintenance
+            inventoryMaintainer.performDailyMaintenance();
+
+            long end = System.currentTimeMillis();
+            log.info("SCHEDULER: inventory rollover job finished in {} ms", (end - start));
+        }catch (Exception e){
+            log.error("SCHEDULER: failure in inventory rollover job", e);
+        }
     }
 }
