@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Component;
 
 @Component
+
 public class IpUtil {
     public String getClientIp(HttpServletRequest request) {
         String ipAddress = request.getHeader("X-Forwarded-For");

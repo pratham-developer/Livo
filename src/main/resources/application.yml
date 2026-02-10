@@ -23,6 +23,11 @@ spring:
 livo:
   ratelimit:
     enabled: true
-    capacity: 50
-    refill-tokens: 50
-    refill-duration: 60
+    write:
+      capacity: 10
+      refill-tokens: 10
+      refill-duration: 60
+    read:
+      capacity: 60
+      refill-tokens: 60
+      refill-duration: 60

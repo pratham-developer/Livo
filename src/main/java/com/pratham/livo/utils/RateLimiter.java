@@ -1,5 +1,6 @@
 package com.pratham.livo.utils;
 
+import com.pratham.livo.enums.HttpRequestType;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.BucketConfiguration;
 import io.github.bucket4j.ConsumptionProbe;
@@ -19,25 +20,41 @@ public class RateLimiter {
 
     private final ProxyManager<String> proxyManager;
 
-    @Value("${livo.ratelimit.capacity}")
-    private long capacity;
+    //write config (strict)
+    @Value("${livo.ratelimit.write.capacity}")
+    private long writeCapacity;
 
-    @Value("${livo.ratelimit.refill-tokens}")
-    private long refillTokens;
+    @Value("${livo.ratelimit.write.refill-tokens}")
+    private long writeRefillTokens;
 
-    @Value("${livo.ratelimit.refill-duration}")
-    private long refillDuration;
+    @Value("${livo.ratelimit.write.refill-duration}")
+    private long writeRefillDuration;
+
+    //read config (lenient)
+    @Value("${livo.ratelimit.read.capacity}")
+    private long readCapacity;
+
+    @Value("${livo.ratelimit.read.refill-tokens}")
+    private long readRefillTokens;
+
+    @Value("${livo.ratelimit.read.refill-duration}")
+    private long readRefillDuration;
 
     @Value("${livo.ratelimit.enabled}")
     private boolean enabled;
 
     private final String keyPrefix = "ratelimit:";
 
-    public ConsumptionProbe tryConsume(String ip){
+    public ConsumptionProbe tryConsume(String ip, HttpRequestType httpRequestType){
         //if not enabled then show infinite tokens available
         if(!enabled){
             return ConsumptionProbe.consumed(Long.MAX_VALUE,0);
         }
+
+        //set config
+        long capacity = (httpRequestType == HttpRequestType.WRITE) ? writeCapacity : readCapacity;
+        long refillTokens = (httpRequestType == HttpRequestType.WRITE) ? writeRefillTokens : readRefillTokens;
+        long refillDuration = (httpRequestType == HttpRequestType.WRITE) ? writeRefillDuration : readRefillDuration;
 
         Supplier<BucketConfiguration> configSupplier = () ->
                 BucketConfiguration.builder()
@@ -49,7 +66,7 @@ public class RateLimiter {
 
         try {
             //try to consume token from the bucket
-            String key = keyPrefix + ip;
+            String key = keyPrefix + httpRequestType.name() + ":" + ip;
             return proxyManager.builder().build(key,configSupplier)
                     .tryConsumeAndReturnRemaining(1);
         }catch (Exception e){
