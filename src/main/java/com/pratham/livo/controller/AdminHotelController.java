@@ -1,6 +1,7 @@
 package com.pratham.livo.controller;
 
 import com.pratham.livo.dto.hotel.HotelBookingDto;
+import com.pratham.livo.dto.hotel.HotelBookingsRequestDto;
 import com.pratham.livo.dto.hotel.HotelRequestDto;
 import com.pratham.livo.dto.hotel.HotelResponseDto;
 import com.pratham.livo.service.HotelService;
@@ -65,10 +66,11 @@ public class AdminHotelController {
     @GetMapping("/{hotelId}/bookings")
     public ResponseEntity<PagedModel<HotelBookingDto>> getBookingsForHotel(
             @PathVariable Long hotelId,
+            @ModelAttribute HotelBookingsRequestDto requestDto,
             @RequestParam(defaultValue = "0") Integer page,
             @RequestParam(defaultValue = "10") Integer size
     ){
-        log.info("Attempting to get bookings for hotel with id: {}",hotelId);
-        return ResponseEntity.ok(hotelService.getBookingsForHotel(hotelId,page,Math.min(size,100)));
+        log.info("Attempting to get bookings for hotel with id: {}", hotelId);
+        return ResponseEntity.ok(hotelService.getBookingsForHotel(hotelId, requestDto, page, Math.min(size,100)));
     }
 }

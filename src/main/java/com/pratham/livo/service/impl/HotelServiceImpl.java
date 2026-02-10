@@ -341,6 +341,7 @@ public class HotelServiceImpl implements HotelService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public PagedModel<HotelResponseDto> getHotelsForHotelManager(Integer page, Integer size) {
         log.info("Retrieving hotels for a hotel manager");
         AuthenticatedUser user = currentUser();
@@ -353,26 +354,40 @@ public class HotelServiceImpl implements HotelService {
     }
 
     @Override
-    public PagedModel<HotelBookingDto> getBookingsForHotel(Long hotelId, Integer page, Integer size) {
-        log.info("Getting bookings for hotel with id: {}",hotelId);
-        //check whether the hotel exists and owned by current user
+    @Transactional(readOnly = true)
+    public PagedModel<HotelBookingDto> getBookingsForHotel(Long hotelId, HotelBookingsRequestDto requestDto, Integer page, Integer size) {
+        log.info("Getting bookings for hotel with id: {}", hotelId);
+
+        // if from is null, go back to beginning of time
+        LocalDate from = (requestDto.getFrom() != null) ? requestDto.getFrom() : LocalDate.of(1970, 1, 1);
+
+        // if to is null, go to far future
+        LocalDate to = (requestDto.getTo() != null) ? requestDto.getTo() : LocalDate.of(2100, 1, 1);
+
+        // validate range
+        if (from.isAfter(to)) {
+            throw new BadRequestException("Invalid date range: from date cannot be after to date");
+        }
+
         AuthenticatedUser user = currentUser();
-        if(!hotelRepository.existsByIdAndOwnerId(hotelId,user.getId())){
+        if(!hotelRepository.existsByIdAndOwnerId(hotelId, user.getId())){
             throw new ResourceNotFoundException("Hotel not found for the authenticated user");
         }
 
-        //fetch bookings for the hotel
-        Pageable pageable = PageRequest.of(page,size,
+        Pageable pageable = PageRequest.of(page, size,
                 Sort.by("startDate").descending()
                         .and(Sort.by("endDate").descending()));
 
-        List<BookingStatus> statusList = List.of(BookingStatus.CONFIRMED,BookingStatus.CANCELLED);
+        List<BookingStatus> statusList = List.of(BookingStatus.CONFIRMED, BookingStatus.CANCELLED);
+
+        // get paginated data
         Page<HotelBookingWrapper> bookingWrappers = bookingRepository.findBookingsForHotel(
-                hotelId,statusList,pageable);
+                hotelId, from, to, statusList, pageable);
 
         Page<HotelBookingDto> dtoPage = bookingWrappers
                 .map(bookingWrapper -> modelMapper.map(bookingWrapper, HotelBookingDto.class));
-        log.info("Successfully got bookings for hotel with id: {}",hotelId);
+
+        log.info("Successfully got bookings for hotel with id: {}", hotelId);
         return new PagedModel<>(dtoPage);
     }
 

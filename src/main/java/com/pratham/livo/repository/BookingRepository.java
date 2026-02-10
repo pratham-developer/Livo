@@ -14,6 +14,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -67,10 +68,14 @@ public interface BookingRepository extends JpaRepository<Booking,Long> {
             select new com.pratham.livo.projection.HotelBookingWrapper(
             b.id,r.type,r.capacity,b.roomsCount,b.startDate,b.endDate,b.bookingStatus)
             from Booking b join b.room r
-            where b.hotel.id = :hotelId and b.bookingStatus in :bookingStatusList
+            where b.hotel.id = :hotelId
+            and b.bookingStatus in :bookingStatusList
+            and b.startDate BETWEEN :fromDate AND :toDate
             """)
     Page<HotelBookingWrapper> findBookingsForHotel(
             @Param("hotelId") Long hotelId,
+            @Param("fromDate") LocalDate from,
+            @Param("toDate") LocalDate to,
             @Param("bookingStatusList") List<BookingStatus> statusList,
             Pageable pageable);
 }
