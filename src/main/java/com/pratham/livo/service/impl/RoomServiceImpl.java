@@ -96,11 +96,10 @@ public class RoomServiceImpl implements RoomService {
         //verify hotel owner
         AuthenticatedUser authenticatedUser = currentUser();
         verifyHotelOwner(authenticatedUser, hotel);
-        List<Room> rooms = roomRepository.findByHotel(hotel);
+        List<Room> rooms = roomRepository.findByHotelAndDeletedFalse(hotel);
         log.info("Found {} rooms for hotelId={}", rooms.size(), hotelId);
 
         return rooms.stream()
-                .filter(room -> Boolean.FALSE.equals(room.getDeleted())) //dont show deleted rooms
                 .map(room -> modelMapper.map(room, RoomResponseDto.class))
                 .collect(Collectors.toList());
     }

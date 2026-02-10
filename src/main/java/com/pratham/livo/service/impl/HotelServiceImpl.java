@@ -10,10 +10,7 @@ import com.pratham.livo.enums.BookingStatus;
 import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.ResourceNotFoundException;
 import com.pratham.livo.exception.SessionNotFoundException;
-import com.pratham.livo.projection.BestHotelWrapper;
-import com.pratham.livo.projection.ManagersHotelWrapper;
-import com.pratham.livo.projection.PriceCheckWrapper;
-import com.pratham.livo.projection.RoomAvailabilityWrapper;
+import com.pratham.livo.projection.*;
 import com.pratham.livo.repository.BookingRepository;
 import com.pratham.livo.repository.HotelRepository;
 import com.pratham.livo.repository.InventoryRepository;
@@ -353,6 +350,30 @@ public class HotelServiceImpl implements HotelService {
                 wrapper -> modelMapper.map(wrapper, HotelResponseDto.class));
         log.info("Successfully retrieved hotels for a hotel manager");
         return new PagedModel<>(hotels);
+    }
+
+    @Override
+    public PagedModel<HotelBookingDto> getBookingsForHotel(Long hotelId, Integer page, Integer size) {
+        log.info("Getting bookings for hotel with id: {}",hotelId);
+        //check whether the hotel exists and owned by current user
+        AuthenticatedUser user = currentUser();
+        if(!hotelRepository.existsByIdAndOwnerId(hotelId,user.getId())){
+            throw new ResourceNotFoundException("Hotel not found for the authenticated user");
+        }
+
+        //fetch bookings for the hotel
+        Pageable pageable = PageRequest.of(page,size,
+                Sort.by("startDate").descending()
+                        .and(Sort.by("endDate").descending()));
+
+        List<BookingStatus> statusList = List.of(BookingStatus.CONFIRMED,BookingStatus.CANCELLED);
+        Page<HotelBookingWrapper> bookingWrappers = bookingRepository.findBookingsForHotel(
+                hotelId,statusList,pageable);
+
+        Page<HotelBookingDto> dtoPage = bookingWrappers
+                .map(bookingWrapper -> modelMapper.map(bookingWrapper, HotelBookingDto.class));
+        log.info("Successfully got bookings for hotel with id: {}",hotelId);
+        return new PagedModel<>(dtoPage);
     }
 
     private void verifyHotelOwner(Hotel hotel){

@@ -48,4 +48,6 @@ public interface HotelRepository extends JpaRepository<Hotel,Long> {
             """)
     Page<ManagersHotelWrapper> findManagersHotels(
             @Param("userId") Long userId, Pageable pageable);
+
+    boolean existsByIdAndOwnerId(Long id, Long ownerId);
 }

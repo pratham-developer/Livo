@@ -5,6 +5,7 @@ import com.pratham.livo.entity.Hotel;
 import com.pratham.livo.entity.Room;
 import com.pratham.livo.enums.BookingStatus;
 import com.pratham.livo.projection.BookingWrapper;
+import com.pratham.livo.projection.HotelBookingWrapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -61,4 +62,15 @@ public interface BookingRepository extends JpaRepository<Booking,Long> {
     JOIN FETCH b.hotel JOIN FETCH b.room
     WHERE b.id = :bookingId""")
     Optional<Booking> findByIdWithGuests(@Param("bookingId") Long bookingId);
+
+    @Query("""
+            select new com.pratham.livo.projection.HotelBookingWrapper(
+            b.id,r.type,r.capacity,b.roomsCount,b.startDate,b.endDate,b.bookingStatus)
+            from Booking b join b.room r
+            where b.hotel.id = :hotelId and b.bookingStatus in :bookingStatusList
+            """)
+    Page<HotelBookingWrapper> findBookingsForHotel(
+            @Param("hotelId") Long hotelId,
+            @Param("bookingStatusList") List<BookingStatus> statusList,
+            Pageable pageable);
 }
