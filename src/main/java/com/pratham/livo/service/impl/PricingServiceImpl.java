@@ -7,6 +7,7 @@ import com.pratham.livo.strategy.PricingStrategy;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -42,6 +43,11 @@ public class PricingServiceImpl implements PricingService {
 
     @Override
     @Scheduled(cron = "0 0 * * * *")
+    @SchedulerLock(
+            name = "updateInventoryPricesTask",
+            lockAtLeastFor = "PT5M",
+            lockAtMostFor = "PT50M"
+    )
     public void updateInventoryPrices() {
         log.info("Starting Hourly Dynamic Pricing Cron Job");
         long start = System.currentTimeMillis();

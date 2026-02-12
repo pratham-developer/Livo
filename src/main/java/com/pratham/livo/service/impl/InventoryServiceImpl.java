@@ -72,8 +72,8 @@ public class InventoryServiceImpl implements InventoryService {
     @Scheduled(cron = "0 0 2 * * *")
     @SchedulerLock(
             name = "dailyInventoryRollTask",
-            lockAtLeastFor = "PT1M",
-            lockAtMostFor = "PT10M"
+            lockAtLeastFor = "PT30M",
+            lockAtMostFor = "PT1H"
     )
     public void runDailyInventoryRoll() {
         log.info("SCHEDULER: triggering daily inventory rollover");

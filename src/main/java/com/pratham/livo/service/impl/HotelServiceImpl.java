@@ -19,6 +19,7 @@ import com.pratham.livo.utils.DateValidator;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
@@ -316,6 +317,11 @@ public class HotelServiceImpl implements HotelService {
 
     @Override
     @Scheduled(cron = "0 0 4 * * *")
+    @SchedulerLock(
+            name = "updatePopularityTask",
+            lockAtLeastFor = "PT10M",
+            lockAtMostFor = "PT1H"
+    )
     @Transactional
     public void updatePopularityOfActiveHotels() {
         log.info("CRON JOB START: Updating Hotel Popularity Scores");

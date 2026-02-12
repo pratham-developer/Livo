@@ -21,6 +21,7 @@ import com.pratham.livo.utils.IdempotencyUtil;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.modelmapper.ModelMapper;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.data.domain.Page;
@@ -213,6 +214,11 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Scheduled(cron = "0 * * * * *") // Runs every minute
+    @SchedulerLock(
+            name = "cleanExpiredBookingsTask",
+            lockAtLeastFor = "PT30S",
+            lockAtMostFor = "PT5M"
+    )
     //no Transactional here
     //we manage it manually inside
     public void cleanExpiredBookings() {
