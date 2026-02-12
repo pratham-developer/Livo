@@ -63,6 +63,7 @@ public class BookingServiceImpl implements BookingService {
     private final IdempotencyUtil idempotencyUtil;
     private final PaymentRepository paymentRepository;
     private final MessagePublisher messagePublisher;
+    private final RefundRepository refundRepository;
 
     @Override
     @Transactional
@@ -400,9 +401,13 @@ public class BookingServiceImpl implements BookingService {
         Booking booking = bookingRepository.findByIdWithGuests(bookingId).orElseThrow(
                 ()->new ResourceNotFoundException("Booking not found with id: "+bookingId)
         );
-        verifyBookingOwner(booking);
+        verifyBookingOwnerOrHotelManager(booking);
+        BookingResponseDto responseDto = getBookingResponseDto(booking);
+        if(booking.getBookingStatus().equals(BookingStatus.CANCELLED)){
+            responseDto.setRefundStatus(refundRepository.findRefundStatus(bookingId,BookingStatus.CANCELLED));
+        }
         log.info("Successfully fetched booking with id: {}",bookingId);
-        return getBookingResponseDto(booking);
+        return responseDto;
     }
 
     private AuthenticatedUser currentUser() {
@@ -431,6 +436,21 @@ public class BookingServiceImpl implements BookingService {
         AuthenticatedUser authenticatedUser = currentUser();
         if(!authenticatedUser.getId().equals(booking.getUser().getId())){
             throw new AccessDeniedException("Booking does not belong to the authenticated user");
+        }
+    }
+
+    private void verifyBookingOwnerOrHotelManager(Booking booking) {
+        AuthenticatedUser currentUser = currentUser();
+        Long currentUserId = currentUser.getId();
+
+        //check if user is the guest
+        boolean isGuest = currentUserId.equals(booking.getUser().getId());
+
+        //check if user is the hotel owner (manager)
+        boolean isManager = currentUserId.equals(booking.getHotel().getOwner().getId());
+
+        if (!isGuest && !isManager) {
+            throw new AccessDeniedException("You are not authorized to view this booking");
         }
     }
 

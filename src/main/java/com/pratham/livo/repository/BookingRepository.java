@@ -69,7 +69,7 @@ public interface BookingRepository extends JpaRepository<Booking,Long> {
 
     @Query("""
     SELECT b FROM Booking b LEFT JOIN FETCH b.guests
-    JOIN FETCH b.hotel JOIN FETCH b.room
+    JOIN FETCH b.hotel h JOIN FETCH h.owner JOIN FETCH b.room
     WHERE b.id = :bookingId""")
     Optional<Booking> findByIdWithGuests(@Param("bookingId") Long bookingId);
 
@@ -109,4 +109,13 @@ public interface BookingRepository extends JpaRepository<Booking,Long> {
             @Param("confirmed") BookingStatus confirmed,
             @Param("cancelled") BookingStatus cancelled
     );
+
+    @Query("""
+           SELECT b FROM Booking b
+           JOIN FETCH b.user
+           JOIN FETCH b.hotel
+           JOIN FETCH b.room
+           WHERE b.id = :id
+           """)
+    Optional<Booking> findByIdForPaymentProcessing(@Param("id") Long id);
 }

@@ -15,23 +15,4 @@ public interface BookingService {
     BookingResponseDto cancelBooking(Long bookingId);
     PagedModel<BookingWrapperDto> getMyBookings(Integer page, Integer size);
     BookingResponseDto getBookingById(Long bookingId);
-
-    /*
-    TODO:
-    1. whenever we open the homepage, an endpoint hits to fetch the last pending booking with option to continue it
-    2. when we click on book button, it should first try to continue an already existing book for the same user,
-    for the same room and between the same dates instead of creating a new booking.
-    3. If a user creates a new Booking B while Booking A is still pending, cancel Booking A immediately (release inventory).
-    Then Create Booking B.
-
-    The Hybrid Logic Flow:
-
-       - User clicks Book (Room B).
-       - Check: Does this user have any pending booking?
-           (i) No: Create Booking for Room B.
-           (ii) Yes (Room B, Same Dates): Return existing Booking (Resume).
-           (iii) Yes (Room A OR Different Dates): Cancel old booking (Release Inventory)
-                 Create Booking for Room B (Replace).
-     */
-
 }

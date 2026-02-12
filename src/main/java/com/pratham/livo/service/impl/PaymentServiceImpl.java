@@ -19,6 +19,7 @@ import com.pratham.livo.repository.*;
 import com.pratham.livo.security.SecurityHelper;
 import com.pratham.livo.service.MessagePublisher;
 import com.pratham.livo.service.PaymentService;
+import com.pratham.livo.utils.EmailSender;
 import com.pratham.livo.utils.IdempotencyUtil;
 import com.razorpay.*;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -50,6 +52,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final MessagePublisher messagePublisher;
     private final RefundRepository refundRepository;
     private final SecurityHelper securityHelper;
+    private final EmailSender emailSender;
 
     @Override
     @Transactional
@@ -193,7 +196,7 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     public void confirmPaymentSuccess(Payment payment, String razorpayPaymentId, String razorpaySignature) {
         //explicitly fetch the latest booking state
-        Booking booking = bookingRepository.findById(payment.getBooking().getId())
+        Booking booking = bookingRepository.findByIdForPaymentProcessing(payment.getBooking().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Booking not found"));
 
         //if booking is already confirmed
@@ -240,6 +243,22 @@ public class PaymentServiceImpl implements PaymentService {
 
             //save inventory list
             inventoryRepository.saveAll(inventoryList);
+            //send email to user for successful booking
+            try {
+                emailSender.sendEmail(
+                        booking.getUser().getEmail(),
+                        "Booking Confirmed",
+                        "booking_confirmed",
+                        Map.of("userName", booking.getUser().getName(),
+                                "bookingId",booking.getId(),
+                                "paymentId",payment.getId(),
+                                "hotelName",booking.getHotel().getName(),
+                                "amount",booking.getAmount()
+                        )
+                );
+            } catch (Exception e) {
+                log.error("Failed to send booking confirmation email for booking id: {}", booking.getId(), e);
+            }
             log.info("Payment confirmed and Inventory updated for Booking ID: {}", booking.getId());
         }catch (ObjectOptimisticLockingFailureException e){
             //handle async refund
@@ -367,6 +386,23 @@ public class PaymentServiceImpl implements PaymentService {
             //save payment
             payment.setPaymentStatus(PaymentStatus.REFUNDED);
             paymentRepository.save(payment);
+            //send email to user for refund initiated
+            try {
+                emailSender.sendEmail(
+                        payment.getBooking().getUser().getEmail(),
+                        "Refund Initiated",
+                        "refund_initiated",
+                        Map.of(
+                                "userName", payment.getBooking().getUser().getName(),
+                                "bookingId", payment.getBooking().getId(),
+                                "paymentId", payment.getId(),
+                                "hotelName", payment.getBooking().getHotel().getName(),
+                                "refundAmount", refundAmount
+                        )
+                );
+            } catch (Exception e) {
+                log.error("Failed to send refund email for payment id: {}", payment.getId(), e);
+            }
             log.info("Refund successful for payment with id: {}", payment.getId());
         }catch (RazorpayException e) {
             log.info("Razorpay Refund Failed for payment with id: {}", payment.getId(), e);

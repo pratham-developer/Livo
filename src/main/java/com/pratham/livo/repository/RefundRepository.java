@@ -3,21 +3,16 @@ package com.pratham.livo.repository;
 import com.pratham.livo.entity.Refund;
 import com.pratham.livo.enums.BookingStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Optional;
 
 @Repository
 public interface RefundRepository extends JpaRepository<Refund,Long> {
-
-    @Modifying
-    @Query("update Refund set refundStatus = :status where razorpayRefundId = :razorpayRefundId")
-    void updateStatus(@Param("razorpayRefundId") String razorpayRefundId,
-                      @Param("status") String status);
 
     @Query("""
     SELECT SUM(r.amount)
@@ -35,4 +30,24 @@ public interface RefundRepository extends JpaRepository<Refund,Long> {
             @Param("toDate") LocalDate toDate,
             @Param("cancelled")BookingStatus cancelled
             );
+
+    @Query("""
+        select r.refundStatus from Refund r
+        join r.payment p join p.booking b
+        where b.id = :bookingId and b.bookingStatus = :cancelled
+    """)
+    String findRefundStatus(
+                             @Param("bookingId") Long bookingId,
+                             @Param("cancelled") BookingStatus cancelled
+    );
+
+    @Query("""
+    SELECT r FROM Refund r
+    JOIN FETCH r.payment p
+    JOIN FETCH p.booking b
+    JOIN FETCH b.user
+    JOIN FETCH b.hotel
+    WHERE r.razorpayRefundId = :razorpayRefundId
+""")
+    Optional<Refund> findByRazorpayRefundId(@Param("razorpayRefundId") String razorpayRefundId);
 }
