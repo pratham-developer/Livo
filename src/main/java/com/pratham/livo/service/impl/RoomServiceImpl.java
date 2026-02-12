@@ -5,6 +5,7 @@ import com.pratham.livo.dto.room.RoomRequestDto;
 import com.pratham.livo.dto.room.RoomResponseDto;
 import com.pratham.livo.entity.Hotel;
 import com.pratham.livo.entity.Room;
+import com.pratham.livo.enums.BookingStatus;
 import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.ResourceNotFoundException;
 import com.pratham.livo.exception.SessionNotFoundException;
@@ -134,7 +135,8 @@ public class RoomServiceImpl implements RoomService {
         inventoryRepository.deleteByRoom(room);
 
         //delete pending bookings
-        bookingRepository.expireBookingsForRoom(room);
+        List<BookingStatus> checkList = List.of(BookingStatus.RESERVED, BookingStatus.GUESTS_ADDED, BookingStatus.PAYMENT_PENDING);
+        bookingRepository.expireBookingsForRoom(room,BookingStatus.EXPIRED,checkList);
 
         log.info("Room with id = {} soft deleted and inventory cleared.", roomId);
     }

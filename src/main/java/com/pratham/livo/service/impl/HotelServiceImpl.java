@@ -11,10 +11,7 @@ import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.ResourceNotFoundException;
 import com.pratham.livo.exception.SessionNotFoundException;
 import com.pratham.livo.projection.*;
-import com.pratham.livo.repository.BookingRepository;
-import com.pratham.livo.repository.HotelRepository;
-import com.pratham.livo.repository.InventoryRepository;
-import com.pratham.livo.repository.RoomRepository;
+import com.pratham.livo.repository.*;
 import com.pratham.livo.security.SecurityHelper;
 import com.pratham.livo.service.HotelService;
 import com.pratham.livo.service.InventoryService;
@@ -36,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
@@ -56,6 +54,7 @@ public class HotelServiceImpl implements HotelService {
     private final SecurityHelper securityHelper;
     private final EntityManager entityManager;
     public static final int MAX_HOTELS_PER_OWNER = 10;
+    private final RefundRepository refundRepository;
 
     @Value("${count.best.hotels}")
     private int COUNT_BEST_HOTELS;
@@ -127,7 +126,8 @@ public class HotelServiceImpl implements HotelService {
         verifyHotelOwner(hotel);
 
         //kill pending bookings
-        bookingRepository.expireBookingsForHotel(hotel);
+        List<BookingStatus> checkList = List.of(BookingStatus.RESERVED, BookingStatus.GUESTS_ADDED, BookingStatus.PAYMENT_PENDING);
+        bookingRepository.expireBookingsForHotel(hotel,BookingStatus.EXPIRED,checkList);
         log.info("Expired Pending Bookings for hotel with id: {}",id);
 
         //soft delete rooms
@@ -358,14 +358,11 @@ public class HotelServiceImpl implements HotelService {
     public PagedModel<HotelBookingDto> getBookingsForHotel(Long hotelId, HotelBookingsRequestDto requestDto, Integer page, Integer size) {
         log.info("Getting bookings for hotel with id: {}", hotelId);
 
-        // if from is null, go back to beginning of time
-        LocalDate from = (requestDto.getFrom() != null) ? requestDto.getFrom() : LocalDate.of(1970, 1, 1);
+        LocalDate from = requestDto.getFrom();
+        LocalDate to = requestDto.getTo();
 
-        // if to is null, go to far future
-        LocalDate to = (requestDto.getTo() != null) ? requestDto.getTo() : LocalDate.of(2100, 1, 1);
-
-        // validate range
-        if (from.isAfter(to)) {
+        //validate the range if both are provided
+        if (from != null && to != null && from.isAfter(to)) {
             throw new BadRequestException("Invalid date range: from date cannot be after to date");
         }
 
@@ -380,15 +377,80 @@ public class HotelServiceImpl implements HotelService {
 
         List<BookingStatus> statusList = List.of(BookingStatus.CONFIRMED, BookingStatus.CANCELLED);
 
-        // get paginated data
+        //get bookings
         Page<HotelBookingWrapper> bookingWrappers = bookingRepository.findBookingsForHotel(
                 hotelId, from, to, statusList, pageable);
 
         Page<HotelBookingDto> dtoPage = bookingWrappers
                 .map(bookingWrapper -> modelMapper.map(bookingWrapper, HotelBookingDto.class));
 
-        log.info("Successfully got bookings for hotel with id: {}", hotelId);
         return new PagedModel<>(dtoPage);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public HotelReportDto getHotelReport(Long hotelId, HotelBookingsRequestDto requestDto) {
+        log.info("Getting report for hotel with id: {}", hotelId);
+
+        //validate dates
+        LocalDate from = requestDto.getFrom();
+        LocalDate to = requestDto.getTo();
+
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new BadRequestException("Invalid date range: from date cannot be after to date");
+        }
+
+        //verify hotel owner
+        AuthenticatedUser user = currentUser();
+        if(!hotelRepository.existsByIdAndOwnerId(hotelId, user.getId())){
+            throw new ResourceNotFoundException("Hotel not found for the authenticated user");
+        }
+
+        //fetch stats
+        HotelBookingStats stats = bookingRepository.findBookingStats(hotelId, from, to,
+                BookingStatus.CONFIRMED,BookingStatus.CANCELLED);
+
+        //fetch total refund amount
+        BigDecimal refundAmount = refundRepository.findTotalAmountRefunded(hotelId, from, to,
+                BookingStatus.CANCELLED);
+
+        //confirmed metrics
+        Long confirmedBookings = stats.getConfirmedCount();
+        BigDecimal confirmedRevenue = stats.getConfirmedRevenue();
+
+        BigDecimal avgRevenue = BigDecimal.ZERO;
+        if (confirmedBookings > 0) {
+            avgRevenue = confirmedRevenue.divide(
+                    BigDecimal.valueOf(confirmedBookings), 2, RoundingMode.HALF_UP
+            );
+        }
+
+        //cancelled metrics
+        Long cancelledBookings = stats.getCancelledCount();
+        BigDecimal lostRevenue = stats.getLostRevenue();
+        BigDecimal totalRefunds = (refundAmount != null) ? refundAmount : BigDecimal.ZERO;
+
+        //cancellation rate
+        double cancellationRate = 0.0;
+        long totalBookings = confirmedBookings + cancelledBookings;
+
+        if (totalBookings > 0) {
+            double rate = ((double) cancelledBookings / totalBookings) * 100;
+            cancellationRate = BigDecimal.valueOf(rate)
+                    .setScale(2, RoundingMode.HALF_UP)
+                    .doubleValue();
+        }
+        log.info("Successfully generated report for hotel with id: {}", hotelId);
+
+        return HotelReportDto.builder()
+                .confirmedBookings(confirmedBookings)
+                .confirmedRevenue(confirmedRevenue)
+                .avgRevenuePerConfirmedBooking(avgRevenue)
+                .cancelledBookings(cancelledBookings)
+                .revenueLostToCancellations(lostRevenue)
+                .totalRefundsProcessed(totalRefunds)
+                .cancellationRate(cancellationRate)
+                .build();
     }
 
     private void verifyHotelOwner(Hotel hotel){

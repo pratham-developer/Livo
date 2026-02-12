@@ -1,9 +1,6 @@
 package com.pratham.livo.controller;
 
-import com.pratham.livo.dto.hotel.HotelBookingDto;
-import com.pratham.livo.dto.hotel.HotelBookingsRequestDto;
-import com.pratham.livo.dto.hotel.HotelRequestDto;
-import com.pratham.livo.dto.hotel.HotelResponseDto;
+import com.pratham.livo.dto.hotel.*;
 import com.pratham.livo.service.HotelService;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -72,5 +69,14 @@ public class AdminHotelController {
     ){
         log.info("Attempting to get bookings for hotel with id: {}", hotelId);
         return ResponseEntity.ok(hotelService.getBookingsForHotel(hotelId, requestDto, page, Math.min(size,100)));
+    }
+
+    @GetMapping("/{hotelId}/report")
+    public ResponseEntity<HotelReportDto> getHotelReport(
+            @PathVariable Long hotelId,
+            @ModelAttribute HotelBookingsRequestDto requestDto
+    ){
+        log.info("Attempting to get report for hotel with id: {}", hotelId);
+        return ResponseEntity.ok(hotelService.getHotelReport(hotelId, requestDto));
     }
 }

@@ -20,4 +20,6 @@ public interface HotelService {
     PagedModel<HotelResponseDto> getHotelsForHotelManager(Integer page, Integer size);
 
     PagedModel<HotelBookingDto> getBookingsForHotel(Long hotelId, HotelBookingsRequestDto requestDto, Integer page, Integer size);
+
+    HotelReportDto getHotelReport(Long hotelId, HotelBookingsRequestDto requestDto);
 }

@@ -5,6 +5,7 @@ import com.pratham.livo.entity.Hotel;
 import com.pratham.livo.entity.Room;
 import com.pratham.livo.enums.BookingStatus;
 import com.pratham.livo.projection.BookingWrapper;
+import com.pratham.livo.projection.HotelBookingStats;
 import com.pratham.livo.projection.HotelBookingWrapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -28,22 +29,30 @@ public interface BookingRepository extends JpaRepository<Booking,Long> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE Booking b
-            SET b.bookingStatus = 'EXPIRED',
+            SET b.bookingStatus = :expired,
                         b.version = b.version + 1
             where b.hotel = :hotel
-            AND b.bookingStatus IN ('RESERVED', 'GUESTS_ADDED', 'PAYMENT_PENDING')
+            AND b.bookingStatus IN :checkList
             """)
-    void expireBookingsForHotel(@Param("hotel") Hotel hotel);
+    void expireBookingsForHotel(
+            @Param("hotel") Hotel hotel,
+            @Param("expired") BookingStatus expired,
+            @Param("checkList") List<BookingStatus> checkList
+    );
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE Booking b
-            SET b.bookingStatus = 'EXPIRED',
+            SET b.bookingStatus = :expired,
                         b.version = b.version + 1
             where b.room = :room
-            AND b.bookingStatus IN ('RESERVED', 'GUESTS_ADDED', 'PAYMENT_PENDING')
+            AND b.bookingStatus IN :checkList
             """)
-    void expireBookingsForRoom(@Param("room") Room room);
+    void expireBookingsForRoom(
+            @Param("room") Room room,
+            @Param("expired") BookingStatus expired,
+            @Param("checkList") List<BookingStatus> checkList
+    );
 
 
     @Query("""
@@ -65,17 +74,39 @@ public interface BookingRepository extends JpaRepository<Booking,Long> {
     Optional<Booking> findByIdWithGuests(@Param("bookingId") Long bookingId);
 
     @Query("""
-            select new com.pratham.livo.projection.HotelBookingWrapper(
-            b.id,r.type,r.capacity,b.roomsCount,b.startDate,b.endDate,b.bookingStatus)
-            from Booking b join b.room r
-            where b.hotel.id = :hotelId
-            and b.bookingStatus in :bookingStatusList
-            and b.startDate BETWEEN :fromDate AND :toDate
-            """)
+        select new com.pratham.livo.projection.HotelBookingWrapper(
+            b.id, r.type, r.capacity, b.roomsCount, b.startDate, b.endDate, b.bookingStatus
+        )
+        from Booking b join b.room r
+        where b.hotel.id = :hotelId
+        and b.bookingStatus in :bookingStatusList
+        AND b.startDate >= COALESCE(:fromDate, b.startDate)
+        AND b.startDate <= COALESCE(:toDate, b.startDate)
+        """)
     Page<HotelBookingWrapper> findBookingsForHotel(
             @Param("hotelId") Long hotelId,
-            @Param("fromDate") LocalDate from,
-            @Param("toDate") LocalDate to,
+            @Param("fromDate") LocalDate fromDate,
+            @Param("toDate") LocalDate toDate,
             @Param("bookingStatusList") List<BookingStatus> statusList,
             Pageable pageable);
+
+    @Query("""
+    SELECT new com.pratham.livo.projection.HotelBookingStats(
+        SUM(CASE WHEN b.bookingStatus = :confirmed THEN 1L ELSE 0L END),
+        SUM(CASE WHEN b.bookingStatus = :confirmed THEN b.amount END),
+        SUM(CASE WHEN b.bookingStatus = :cancelled THEN 1L ELSE 0L END),
+        SUM(CASE WHEN b.bookingStatus = :cancelled THEN b.amount END)
+    )
+    FROM Booking b
+    WHERE b.hotel.id = :hotelId
+    AND b.startDate >= COALESCE(:fromDate, b.startDate)
+    AND b.startDate <= COALESCE(:toDate, b.startDate)
+    """)
+    HotelBookingStats findBookingStats(
+            @Param("hotelId") Long hotelId,
+            @Param("fromDate") LocalDate fromDate,
+            @Param("toDate") LocalDate toDate,
+            @Param("confirmed") BookingStatus confirmed,
+            @Param("cancelled") BookingStatus cancelled
+    );
 }
