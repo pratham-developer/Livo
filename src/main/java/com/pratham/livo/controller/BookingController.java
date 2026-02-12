@@ -1,14 +1,13 @@
 package com.pratham.livo.controller;
 
-import com.pratham.livo.dto.booking.AddGuestDto;
-import com.pratham.livo.dto.booking.BookingRequestDto;
-import com.pratham.livo.dto.booking.BookingResponseDto;
-import com.pratham.livo.dto.booking.BookingWrapperDto;
+import com.pratham.livo.dto.booking.*;
 import com.pratham.livo.service.BookingService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.web.PagedModel;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -17,22 +16,26 @@ import java.util.List;
 @RequestMapping("/bookings")
 @RequiredArgsConstructor
 @Slf4j
+@Validated //required to validate List<AddGuestDto> in request body
 public class BookingController {
 
     private final BookingService bookingService;
 
     @PostMapping("/init")
-    public ResponseEntity<BookingResponseDto> initBooking(@RequestBody BookingRequestDto bookingRequestDto){
+    public ResponseEntity<BookingResponseDto> initBooking(@Valid @RequestBody BookingRequestDto bookingRequestDto){
         log.info("Attempting to create booking with: {}", bookingRequestDto);
         return ResponseEntity.ok(bookingService.initBooking(bookingRequestDto));
     }
 
     @PostMapping("/{bookingId}/addGuests")
-    public ResponseEntity<BookingResponseDto> addGuests(@PathVariable Long bookingId, @RequestBody List<AddGuestDto> guestDtoList){
+    public ResponseEntity<BookingResponseDto> addGuests(
+            @PathVariable Long bookingId,
+            @RequestBody List<@Valid AddGuestDto> guestDtoList //validates each item in list
+    ){
         log.info("Attempting to add guests to booking with id: {}",bookingId);
         return ResponseEntity.ok(bookingService.addGuests(bookingId,guestDtoList));
     }
-
+    
     @PostMapping("/{bookingId}/cancel")
     public ResponseEntity<BookingResponseDto> cancelBooking(@PathVariable Long bookingId){
         log.info("Attempting to cancel booking with id: {}",bookingId);
@@ -54,5 +57,4 @@ public class BookingController {
         log.info("Attempting to get booking with id: {}",bookingId);
         return ResponseEntity.ok(bookingService.getBookingById(bookingId));
     }
-
 }

@@ -2,6 +2,7 @@ package com.pratham.livo.controller;
 
 import com.pratham.livo.dto.hotel.*;
 import com.pratham.livo.service.HotelService;
+import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.web.PagedModel;
@@ -18,7 +19,7 @@ public class AdminHotelController {
     private final HotelService hotelService;
 
     @PostMapping
-    ResponseEntity<HotelResponseDto> createNewHotel(@RequestBody HotelRequestDto hotelRequestDto){
+    ResponseEntity<HotelResponseDto> createNewHotel(@Valid @RequestBody HotelRequestDto hotelRequestDto){
         log.info("Attempting to create hotel with name: {}",hotelRequestDto.getName());
         HotelResponseDto hotelResponseDto = hotelService.createHotel(hotelRequestDto);
         return ResponseEntity.status(HttpStatus.CREATED).body(hotelResponseDto);
@@ -31,7 +32,7 @@ public class AdminHotelController {
     }
 
     @PutMapping("/{hotelId}")
-    public ResponseEntity<HotelResponseDto> updateHotel(@PathVariable Long hotelId, @RequestBody HotelRequestDto hotelRequestDto){
+    public ResponseEntity<HotelResponseDto> updateHotel(@PathVariable Long hotelId, @Valid @RequestBody HotelRequestDto hotelRequestDto){
         log.info("Attempting to update hotel with id: {}",hotelId);
         HotelResponseDto hotelResponseDto = hotelService.updateHotelById(hotelId, hotelRequestDto);
         return ResponseEntity.ok(hotelResponseDto);
@@ -63,7 +64,7 @@ public class AdminHotelController {
     @GetMapping("/{hotelId}/bookings")
     public ResponseEntity<PagedModel<HotelBookingDto>> getBookingsForHotel(
             @PathVariable Long hotelId,
-            @ModelAttribute HotelBookingsRequestDto requestDto,
+            @Valid @ModelAttribute HotelBookingsRequestDto requestDto,
             @RequestParam(defaultValue = "0") Integer page,
             @RequestParam(defaultValue = "10") Integer size
     ){
@@ -74,7 +75,7 @@ public class AdminHotelController {
     @GetMapping("/{hotelId}/report")
     public ResponseEntity<HotelReportDto> getHotelReport(
             @PathVariable Long hotelId,
-            @ModelAttribute HotelBookingsRequestDto requestDto
+            @Valid @ModelAttribute HotelBookingsRequestDto requestDto
     ){
         log.info("Attempting to get report for hotel with id: {}", hotelId);
         return ResponseEntity.ok(hotelService.getHotelReport(hotelId, requestDto));

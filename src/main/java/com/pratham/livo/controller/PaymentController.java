@@ -4,9 +4,12 @@ import com.pratham.livo.dto.payment.PaymentInitResponseDto;
 import com.pratham.livo.dto.payment.PaymentVerifyRequestDto;
 import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.service.PaymentService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -15,6 +18,7 @@ import java.util.UUID;
 @RequestMapping("/payments")
 @RequiredArgsConstructor
 @Slf4j
+@Validated
 public class PaymentController {
 
     private final PaymentService paymentService;
@@ -22,6 +26,7 @@ public class PaymentController {
     @PostMapping("/{bookingId}/init")
     public ResponseEntity<PaymentInitResponseDto> initPayment(
             @PathVariable Long bookingId,
+            @NotNull(message = "Idempotency-Key header is required")
             @RequestHeader(name = "Idempotency-Key") UUID idempotencyKey){
         log.info("Attempting to initiate payment for booking with id: {}",bookingId);
         return ResponseEntity.ok(paymentService.initPayment(bookingId,idempotencyKey));
@@ -29,7 +34,7 @@ public class PaymentController {
 
     @PostMapping("/verify")
     public ResponseEntity<Void> verifyPayment(
-            @RequestBody PaymentVerifyRequestDto paymentVerifyRequestDto){
+            @Valid @RequestBody PaymentVerifyRequestDto paymentVerifyRequestDto){
         log.info("Attempting to verify payment with razorpayOrderId: {}",paymentVerifyRequestDto.getRazorpayOrderId());
         boolean isLegit = paymentService.verifyPaymentFromClient(paymentVerifyRequestDto);
         if(!isLegit){

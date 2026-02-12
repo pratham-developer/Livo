@@ -3,6 +3,7 @@ package com.pratham.livo.controller;
 import com.pratham.livo.dto.room.RoomRequestDto;
 import com.pratham.livo.dto.room.RoomResponseDto;
 import com.pratham.livo.service.RoomService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -20,7 +21,7 @@ public class AdminRoomController {
     private final RoomService roomService;
 
     @PostMapping("/hotel/{hotelId}")
-    public ResponseEntity<RoomResponseDto> createNewRoom(@PathVariable Long hotelId, @RequestBody RoomRequestDto roomRequestDto){
+    public ResponseEntity<RoomResponseDto> createNewRoom(@PathVariable Long hotelId, @Valid @RequestBody RoomRequestDto roomRequestDto){
         log.info("Attempting to create room in hotel(id={}) with type: {}",hotelId, roomRequestDto.getType());
         RoomResponseDto roomResponseDto = roomService.createNewRoomInHotel(hotelId, roomRequestDto);
         return ResponseEntity.status(HttpStatus.CREATED).body(roomResponseDto);

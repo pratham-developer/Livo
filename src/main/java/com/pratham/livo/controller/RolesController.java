@@ -3,6 +3,7 @@ package com.pratham.livo.controller;
 import com.pratham.livo.dto.roles.ProcessRequestDto;
 import com.pratham.livo.dto.roles.RoleRequestDto;
 import com.pratham.livo.service.RolesService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.web.PagedModel;
@@ -39,11 +40,10 @@ public class RolesController {
     @PutMapping("request/{requestId}/process")
     public ResponseEntity<Void> processRoleAdditionPendingRequest(
             @PathVariable Long requestId,
-            @RequestBody ProcessRequestDto processRequestDto
-            ){
+            @Valid @RequestBody ProcessRequestDto processRequestDto
+    ){
         log.info("Attempting to process request for role addition with id: {}",requestId);
         rolesService.processRoleAdditionPendingRequest(requestId,processRequestDto);
         return ResponseEntity.noContent().build();
     }
-
 }

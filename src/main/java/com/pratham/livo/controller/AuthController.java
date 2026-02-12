@@ -5,6 +5,7 @@ import com.pratham.livo.dto.auth.otp.*;
 import com.pratham.livo.service.AuthService;
 import com.pratham.livo.utils.IpUtil;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -22,7 +23,7 @@ public class AuthController {
 
     @PostMapping("/signup/initiate")
     public ResponseEntity<InitiateOtpResponseDto> initiateSignup(
-            @RequestBody SignupRequestDto requestDto,
+            @Valid @RequestBody SignupRequestDto requestDto,
             HttpServletRequest servletRequest
     ){
         log.info("Attempting to initiate signup for user with email: {}",requestDto.getEmail());
@@ -32,18 +33,18 @@ public class AuthController {
 
     @PostMapping("/signup/complete")
     public ResponseEntity<OtpVerifyResponseDto> completeSignup(
-            @RequestBody SignupOtpVerifyRequestDto requestDto,
+            @Valid @RequestBody SignupOtpVerifyRequestDto requestDto,
             HttpServletRequest servletRequest
     ){
         log.info("Attempting to complete signup for user with registrationId: {}",requestDto.getRegistrationId());
         String ip = ipUtil.getClientIp(servletRequest);
         return ResponseEntity.status(HttpStatus.CREATED)
-                        .body(authService.completeSignup(requestDto,ip));
+                .body(authService.completeSignup(requestDto,ip));
     }
 
     @PostMapping("/signup/resend-otp")
     public ResponseEntity<ResendOtpResponseDto> resendSignupOtp(
-            @RequestBody ResendOtpRequestDto requestDto,
+            @Valid @RequestBody ResendOtpRequestDto requestDto,
             HttpServletRequest servletRequest
     ){
         log.info("Attempting to resend otp for signing up user with registrationId: {}",requestDto.getRegistrationId());
@@ -52,9 +53,39 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponseDto> login(@RequestBody LoginRequestDto loginRequestDto){
+    public ResponseEntity<LoginResponseDto> login(@Valid @RequestBody LoginRequestDto loginRequestDto){
         log.info("Attempting to login user with email: {}",loginRequestDto.getEmail());
         return ResponseEntity.ok(authService.login(loginRequestDto));
+    }
+
+    @PostMapping("/forgot-pwd/initiate")
+    public ResponseEntity<InitiateOtpResponseDto> initiateForgotPwd(
+            @Valid @RequestBody ForgotPwdRequestDto requestDto,
+            HttpServletRequest servletRequest
+    ){
+        log.info("Attempting to initiate forgot pwd for user with email: {}",requestDto.getEmail());
+        String ip = ipUtil.getClientIp(servletRequest);
+        return ResponseEntity.ok(authService.initiateForgotPwd(requestDto,ip));
+    }
+
+    @PostMapping("/forgot-pwd/complete")
+    public ResponseEntity<OtpVerifyResponseDto> completeForgotPwd(
+            @Valid @RequestBody ForgotOtpVerifyRequestDto requestDto,
+            HttpServletRequest servletRequest
+    ){
+        log.info("Attempting to complete forgot pwd for user with registrationId: {}",requestDto.getRegistrationId());
+        String ip = ipUtil.getClientIp(servletRequest);
+        return ResponseEntity.ok(authService.completeForgotPwd(requestDto,ip));
+    }
+
+    @PostMapping("/forgot-pwd/resend-otp")
+    public ResponseEntity<ResendOtpResponseDto> resendForgotPwdOtp(
+            @Valid @RequestBody ResendOtpRequestDto requestDto,
+            HttpServletRequest servletRequest
+    ){
+        log.info("Attempting to resend otp for forgot pwd with registrationId: {}",requestDto.getRegistrationId());
+        String ip = ipUtil.getClientIp(servletRequest);
+        return ResponseEntity.ok(authService.resendForgotPwdOtp(requestDto,ip));
     }
 
     @PostMapping("/logout")
@@ -66,35 +97,5 @@ public class AuthController {
     @PostMapping("/refresh")
     public ResponseEntity<LoginResponseDto> refresh(@RequestHeader("x-refresh-token") String refreshToken){
         return ResponseEntity.ok(authService.refresh(refreshToken));
-    }
-
-    @PostMapping("/forgot-pwd/initiate")
-    public ResponseEntity<InitiateOtpResponseDto> initiateForgotPwd(
-            @RequestBody ForgotPwdRequestDto requestDto,
-            HttpServletRequest servletRequest
-    ){
-        log.info("Attempting to initiate forgot pwd for user with email: {}",requestDto.getEmail());
-        String ip = ipUtil.getClientIp(servletRequest);
-        return ResponseEntity.ok(authService.initiateForgotPwd(requestDto,ip));
-    }
-
-    @PostMapping("/forgot-pwd/complete")
-    public ResponseEntity<OtpVerifyResponseDto> completeForgotPwd(
-            @RequestBody ForgotOtpVerifyRequestDto requestDto,
-            HttpServletRequest servletRequest
-    ){
-        log.info("Attempting to complete forgot pwd for user with registrationId: {}",requestDto.getRegistrationId());
-        String ip = ipUtil.getClientIp(servletRequest);
-        return ResponseEntity.ok(authService.completeForgotPwd(requestDto,ip));
-    }
-
-    @PostMapping("/forgot-pwd/resend-otp")
-    public ResponseEntity<ResendOtpResponseDto> resendForgotPwdOtp(
-            @RequestBody ResendOtpRequestDto requestDto,
-            HttpServletRequest servletRequest
-    ){
-        log.info("Attempting to resend otp for forgot pwd with registrationId: {}",requestDto.getRegistrationId());
-        String ip = ipUtil.getClientIp(servletRequest);
-        return ResponseEntity.ok(authService.resendForgotPwdOtp(requestDto,ip));
     }
 }
