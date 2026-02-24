@@ -20,7 +20,7 @@ public class HotelSearchRequestDto {
     @FutureOrPresent(message = "Start date must be today or in the future")
     private LocalDate startDate;
 
-    @Future(message = "End date must be in the future")
+    @FutureOrPresent(message = "End date must be today or in the future")
     private LocalDate endDate;
 
     @Min(value = 1, message = "At least 1 room is required")
