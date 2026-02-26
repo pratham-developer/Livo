@@ -8,13 +8,13 @@ public interface AuthService {
     void logout(String refreshToken);
     LoginResponseDto refresh(String refreshToken);
 
-    InitiateOtpResponseDto initiateSignup(SignupRequestDto requestDto, String ipAddress);
-    OtpVerifyResponseDto completeSignup(SignupOtpVerifyRequestDto requestDto, String ipAddress);
-    ResendOtpResponseDto resendSignupOtp(ResendOtpRequestDto requestDto, String ipAddress);
+    InitiateOtpResponseDto initiateSignup(SignupRequestDto requestDto);
+    OtpVerifyResponseDto completeSignup(SignupOtpVerifyRequestDto requestDto);
+    ResendOtpResponseDto resendSignupOtp(ResendOtpRequestDto requestDto);
 
-    InitiateOtpResponseDto initiateForgotPwd(ForgotPwdRequestDto requestDto, String ipAddress);
-    OtpVerifyResponseDto completeForgotPwd(ForgotOtpVerifyRequestDto requestDto, String ipAddress);
-    ResendOtpResponseDto resendForgotPwdOtp(ResendOtpRequestDto requestDto, String ipAddress);
+    InitiateOtpResponseDto initiateForgotPwd(ForgotPwdRequestDto requestDto);
+    OtpVerifyResponseDto completeForgotPwd(ForgotOtpVerifyRequestDto requestDto);
+    ResendOtpResponseDto resendForgotPwdOtp(ResendOtpRequestDto requestDto);
 
 
 }

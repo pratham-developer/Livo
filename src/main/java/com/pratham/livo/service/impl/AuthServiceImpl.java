@@ -107,14 +107,14 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public InitiateOtpResponseDto initiateSignup(SignupRequestDto requestDto, String ipAddress) {
+    public InitiateOtpResponseDto initiateSignup(SignupRequestDto requestDto) {
         log.info("Initiating signup with email: {}",requestDto.getEmail());
         if (userRepository.existsByEmail(requestDto.getEmail())) {
             throw new BadRequestException("An account already exists with this email.");
         }
         //create otp session
         OtpHelperDto otpHelperDto = otpService.createOtpSession(
-                requestDto.getEmail(),ipAddress,
+                requestDto.getEmail(),
                 OtpType.SIGNUP,Map.of(PAYLOAD_NAME,requestDto.getName(),
                         PAYLOAD_PWD_HASH,passwordEncoder.encode(requestDto.getPassword()))
                 );
@@ -137,13 +137,13 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public OtpVerifyResponseDto completeSignup(SignupOtpVerifyRequestDto requestDto, String ipAddress) {
+    public OtpVerifyResponseDto completeSignup(SignupOtpVerifyRequestDto requestDto) {
         log.info("Completing signup with registrationId: {}", requestDto.getRegistrationId());
         //verify and get the otp session
         String registrationId = requestDto.getRegistrationId();
         OtpSession otpSession = otpService.verifyOtp(
                 registrationId,
-                ipAddress, OtpType.SIGNUP,
+                OtpType.SIGNUP,
                 requestDto.getOtp()
         );
 
@@ -177,12 +177,12 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public ResendOtpResponseDto resendSignupOtp(ResendOtpRequestDto requestDto, String ipAddress) {
+    public ResendOtpResponseDto resendSignupOtp(ResendOtpRequestDto requestDto) {
         log.info("Resending otp for signup with registrationId: {}", requestDto.getRegistrationId());
         //update the otp session with new otp
         OtpHelperDto otpHelperDto = otpService.resendOtp(
                requestDto.getRegistrationId(),
-               ipAddress,OtpType.SIGNUP
+               OtpType.SIGNUP
         );
 
 
@@ -199,14 +199,14 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public InitiateOtpResponseDto initiateForgotPwd(ForgotPwdRequestDto requestDto, String ipAddress) {
+    public InitiateOtpResponseDto initiateForgotPwd(ForgotPwdRequestDto requestDto) {
         log.info("Initiating forgot password with email: {}",requestDto.getEmail());
         if (!userRepository.existsByEmail(requestDto.getEmail())) {
             throw new BadRequestException("User not found with this email.");
         }
         //create otp session
         OtpHelperDto otpHelperDto = otpService.createOtpSession(
-                requestDto.getEmail(),ipAddress,
+                requestDto.getEmail(),
                 OtpType.FORGOT,Map.of());
 
         //send email to user for otp
@@ -227,7 +227,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public OtpVerifyResponseDto completeForgotPwd(ForgotOtpVerifyRequestDto requestDto, String ipAddress) {
+    public OtpVerifyResponseDto completeForgotPwd(ForgotOtpVerifyRequestDto requestDto) {
         log.info("Completing forgot pwd with registrationId: {}", requestDto.getRegistrationId());
         String newPassword = requestDto.getNewPassword();
         if(newPassword == null || newPassword.isEmpty()){
@@ -237,7 +237,7 @@ public class AuthServiceImpl implements AuthService {
         String registrationId = requestDto.getRegistrationId();
         OtpSession otpSession = otpService.verifyOtp(
                 registrationId,
-                ipAddress, OtpType.FORGOT,
+                OtpType.FORGOT,
                 requestDto.getOtp()
         );
 
@@ -267,12 +267,12 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public ResendOtpResponseDto resendForgotPwdOtp(ResendOtpRequestDto requestDto, String ipAddress) {
+    public ResendOtpResponseDto resendForgotPwdOtp(ResendOtpRequestDto requestDto) {
         log.info("Resending otp for forgot pwd with registrationId: {}", requestDto.getRegistrationId());
         //update the otp session
         OtpHelperDto otpHelperDto = otpService.resendOtp(
                 requestDto.getRegistrationId(),
-                ipAddress,OtpType.FORGOT
+                OtpType.FORGOT
         );
 
 

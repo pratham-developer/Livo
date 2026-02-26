@@ -30,7 +30,7 @@ public class OtpServiceImpl implements OtpService {
     private static final long ABSOLUTE_SESSION_LIMIT = 1200000;
 
     @Override
-    public OtpHelperDto createOtpSession(String email, String ipAddress, OtpType otpType, Map<String, String> payload) {
+    public OtpHelperDto createOtpSession(String email, OtpType otpType, Map<String, String> payload) {
         //generate otp session
         String registrationId = UUID.randomUUID().toString(); //reg id for ensuring same device
         String otp = otpUtil.generateOtp(); //otp for verification
@@ -40,7 +40,6 @@ public class OtpServiceImpl implements OtpService {
                 .payload(payload)
                 .email(email)
                 .otpHash(passwordEncoder.encode(otp))
-                .ipAddress(ipAddress)
                 .attempts(0).resendCount(0)
                 .lastResendAt(System.currentTimeMillis())
                 .sessionCreatedAt(System.currentTimeMillis())
@@ -57,9 +56,9 @@ public class OtpServiceImpl implements OtpService {
     }
 
     @Override
-    public OtpSession verifyOtp(String registrationId, String ipAddress, OtpType otpType, String inputOtp) {
+    public OtpSession verifyOtp(String registrationId, OtpType otpType, String inputOtp) {
         long now = System.currentTimeMillis();
-        OtpSession otpSession = validateSecurity(registrationId,ipAddress,otpType,now);
+        OtpSession otpSession = validateSecurity(registrationId,otpType,now);
         //validate OTP
         if (!passwordEncoder.matches(inputOtp, otpSession.getOtpHash())) {
             handleWrongOtp(registrationId,otpSession); //throws exception
@@ -69,10 +68,10 @@ public class OtpServiceImpl implements OtpService {
     }
 
     @Override
-    public OtpHelperDto resendOtp(String registrationId, String ipAddress, OtpType otpType) {
+    public OtpHelperDto resendOtp(String registrationId, OtpType otpType) {
         //validate security
         long now = System.currentTimeMillis();
-        OtpSession otpSession = validateSecurity(registrationId,ipAddress,otpType,now);
+        OtpSession otpSession = validateSecurity(registrationId,otpType,now);
 
         //if somehow arrive here with max resend attempts already
         int resendCount = otpSession.getResendCount();
@@ -103,7 +102,7 @@ public class OtpServiceImpl implements OtpService {
                 .nextResendAt(now+RESEND_TIME_LIMIT).build();
     }
 
-    private OtpSession validateSecurity(String registrationId, String ipAddress, OtpType otpType, long now){
+    private OtpSession validateSecurity(String registrationId, OtpType otpType, long now){
         //fetch otp session from redis
         OtpSession otpSession = otpUtil.fetchFromRedis(registrationId,otpType);
 
@@ -114,16 +113,9 @@ public class OtpServiceImpl implements OtpService {
 
         //if registration window expired then delete session
         long sessionAge = now - otpSession.getSessionCreatedAt();
-
         if(sessionAge > ABSOLUTE_SESSION_LIMIT){
             deleteOtpSession(registrationId,otpSession);
             throw new SecurityRiskException("Session expired.");
-        }
-
-        //ip match
-        if (!ipAddress.equals(otpSession.getIpAddress())) {
-            deleteOtpSession(registrationId,otpSession);
-            throw new SecurityRiskException("IP Address mismatch.");
         }
 
         //if somehow arrive here with max attempts already

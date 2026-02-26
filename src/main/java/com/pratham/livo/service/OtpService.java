@@ -9,10 +9,10 @@ import java.util.Map;
 public interface OtpService {
 
      OtpHelperDto createOtpSession(
-            String email, String ipAddress,
+            String email,
             OtpType otpType, Map<String,String> payload);
 
-    OtpSession verifyOtp(String registrationId, String ipAddress, OtpType otpType, String inputOtp);
-    OtpHelperDto resendOtp(String registrationId, String ipAddress, OtpType otpType);
+    OtpSession verifyOtp(String registrationId, OtpType otpType, String inputOtp);
+    OtpHelperDto resendOtp(String registrationId, OtpType otpType);
     void deleteOtpSession(String registrationId, OtpSession otpSession);
 }
