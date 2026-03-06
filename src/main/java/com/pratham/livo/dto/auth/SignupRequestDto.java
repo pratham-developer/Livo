@@ -21,4 +21,12 @@ public class SignupRequestDto {
     @NotBlank(message = "Password is required")
     @Size(min = 6, message = "Password must be at least 6 characters")
     private String password;
+
+    public void setEmail(String email) {
+        if (email != null) {
+            this.email = email.trim().toLowerCase();
+        } else {
+            this.email = null;
+        }
+    }
 }
