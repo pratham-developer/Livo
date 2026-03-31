@@ -1,9 +1,6 @@
 package com.pratham.livo.advice;
 
-import com.pratham.livo.exception.BadRequestException;
-import com.pratham.livo.exception.InventoryBusyException;
-import com.pratham.livo.exception.RateLimitExceededException;
-import com.pratham.livo.exception.ResourceNotFoundException;
+import com.pratham.livo.exception.*;
 import io.jsonwebtoken.JwtException;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
@@ -160,6 +157,15 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<?>> handleBadRequest(BadRequestException exception) {
         ApiError apiError = ApiError.builder()
                 .status(HttpStatus.BAD_REQUEST)
+                .message(exception.getMessage())
+                .build();
+        return buildErrorResponseEntity(apiError);
+    }
+
+    @ExceptionHandler(CustomException.class)
+    public ResponseEntity<ApiResponse<?>> handleCustomException(CustomException exception) {
+        ApiError apiError = ApiError.builder()
+                .status(exception.getHttpStatus())
                 .message(exception.getMessage())
                 .build();
         return buildErrorResponseEntity(apiError);

@@ -6,10 +6,7 @@ import com.pratham.livo.dto.message.RefundMessage;
 import com.pratham.livo.entity.*;
 import com.pratham.livo.enums.BookingStatus;
 import com.pratham.livo.enums.PaymentStatus;
-import com.pratham.livo.exception.BadRequestException;
-import com.pratham.livo.exception.InventoryBusyException;
-import com.pratham.livo.exception.ResourceNotFoundException;
-import com.pratham.livo.exception.SessionNotFoundException;
+import com.pratham.livo.exception.*;
 import com.pratham.livo.projection.BookingWrapper;
 import com.pratham.livo.repository.*;
 import com.pratham.livo.security.SecurityHelper;
@@ -29,6 +26,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PagedModel;
+import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -154,11 +152,11 @@ public class BookingServiceImpl implements BookingService {
         verifyBookingOwner(booking);
 
         //ensure booking status is valid
-        if(hasExpired(booking)) throw new BadRequestException("Booking has expired");
+        if(hasExpired(booking)) throw new CustomException("Booking has expired", HttpStatus.CONFLICT);
 
         if(booking.getBookingStatus()!=BookingStatus.RESERVED
                 && booking.getBookingStatus()!=BookingStatus.GUESTS_ADDED){
-            throw new BadRequestException("Guests cannot be added. Booking is in status: " + booking.getBookingStatus());
+            throw new CustomException("Guests cannot be added. Booking is in status: " + booking.getBookingStatus(),HttpStatus.CONFLICT);
         }
 
         //max capacity = room capacity * number of rooms booked
