@@ -32,9 +32,7 @@ The detailed system design, architectural decisions, request flows, data modelin
 
 <div align="center">
 
-**[View Documentation &rarr;](https://deepwiki.com/pratham-developer/Livo)**
-
-`https://deepwiki.com/pratham-developer/Livo`
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/pratham-developer/Livo)
 
 </div>
 
