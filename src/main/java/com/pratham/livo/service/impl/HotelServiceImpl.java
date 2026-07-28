@@ -10,6 +10,9 @@ import com.pratham.livo.enums.BookingStatus;
 import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.ResourceNotFoundException;
 import com.pratham.livo.exception.SessionNotFoundException;
+import com.pratham.livo.media.event.MediaEventPublisher;
+import com.pratham.livo.media.event.MediaPromotionEvent;
+import com.pratham.livo.media.util.MediaUrlProvider;
 import com.pratham.livo.projection.*;
 import com.pratham.livo.repository.*;
 import com.pratham.livo.security.SecurityHelper;
@@ -56,6 +59,8 @@ public class HotelServiceImpl implements HotelService {
     private final EntityManager entityManager;
     public static final int MAX_HOTELS_PER_OWNER = 10;
     private final RefundRepository refundRepository;
+    private final MediaEventPublisher mediaEventPublisher;
+    private final MediaUrlProvider mediaUrlProvider;
 
     @Value("${count.best.hotels}")
     private int COUNT_BEST_HOTELS;
@@ -64,25 +69,43 @@ public class HotelServiceImpl implements HotelService {
     @Transactional
     public HotelResponseDto createHotel(HotelRequestDto hotelRequestDto) {
         AuthenticatedUser authenticatedUser = currentUser();
-        //check if upper limit reached
         long hotelCount = hotelRepository.countByOwnerIdAndDeletedFalse(authenticatedUser.getId());
         if (hotelCount >= MAX_HOTELS_PER_OWNER) {
             throw new BadRequestException("Maximum hotel limit reached");
         }
-        log.info("Creating hotel with name: {}",hotelRequestDto.getName());
-        Hotel hotel = modelMapper.map(hotelRequestDto,Hotel.class);
 
-        //owner attach
+        log.info("Creating hotel with name: {}", hotelRequestDto.getName());
+        Hotel hotel = modelMapper.map(hotelRequestDto, Hotel.class);
+
         User ownerRef = entityManager.getReference(User.class, authenticatedUser.getId());
         hotel.setOwner(ownerRef);
-
-        //set active, deleted = false on creation
         hotel.setActive(false);
         hotel.setDeleted(false);
 
+        // We initially save the hotel with the temporary paths in the DB.
+        // Once the RabbitMQ worker finishes, it will overwrite these with permanent paths.
+        hotel.setPhotos(hotelRequestDto.getPhotos());
+
+        // 1. Save to generate the ID
         Hotel savedHotel = hotelRepository.save(hotel);
-        log.info("Hotel created with id: {}",savedHotel.getId());
-        return modelMapper.map(savedHotel,HotelResponseDto.class);
+
+        // 2. Publish the async event
+        List<String> incomingTempPaths = hotelRequestDto.getPhotos() != null ? hotelRequestDto.getPhotos() : List.of();
+
+        if (!incomingTempPaths.isEmpty()) {
+            MediaPromotionEvent event = new MediaPromotionEvent(
+                    savedHotel.getId(),
+                    MediaPromotionEvent.EntityType.HOTEL,
+                    authenticatedUser.getId(),
+                    incomingTempPaths,
+                    List.of(), // No retained paths on creation
+                    List.of()  // No paths to delete on creation
+            );
+            mediaEventPublisher.publishPromotionEvent(event);
+        }
+
+        log.info("Hotel created with id: {}", savedHotel.getId());
+        return enrichWithPublicUrls(modelMapper.map(savedHotel, HotelResponseDto.class));
     }
 
     @Override
@@ -93,29 +116,69 @@ public class HotelServiceImpl implements HotelService {
                 new ResourceNotFoundException("Hotel Not Found with id: "+id));
         verifyHotelOwner(hotel);
         log.info("Hotel retrieved with id: {}",hotel.getId());
-        return modelMapper.map(hotel, HotelResponseDto.class);
+        return enrichWithPublicUrls(modelMapper.map(hotel, HotelResponseDto.class));
     }
 
     @Override
     @Transactional
     public HotelResponseDto updateHotelById(Long id, HotelRequestDto hotelRequestDto) {
-        log.info("Updating hotel with id: {}",id);
+        log.info("Updating hotel with id: {}", id);
         Hotel hotel = hotelRepository.findById(id).orElseThrow(()->
-                new ResourceNotFoundException("Hotel Not Found with id: "+id));
+                new ResourceNotFoundException("Hotel Not Found with id: " + id));
 
         verifyHotelOwner(hotel);
 
-        // Prevent updates to deleted hotels
         if(hotel.getDeleted()) {
             throw new BadRequestException("Cannot update a deleted hotel");
         }
 
+        List<String> existingPhotosInDb = hotel.getPhotos() != null ? hotel.getPhotos() : List.of();
+        List<String> incomingPaths = hotelRequestDto.getPhotos() != null ? hotelRequestDto.getPhotos() : List.of();
+
+        List<String> newTempPaths = incomingPaths.stream()
+                .filter(path -> path.startsWith("temp/"))
+                .toList();
+
+        List<String> retainedPermanentPaths = incomingPaths.stream()
+                .filter(path -> !path.startsWith("temp/"))
+                .toList();
+
+        List<String> photosToDelete = existingPhotosInDb.stream()
+                .filter(oldPhoto -> !retainedPermanentPaths.contains(oldPhoto))
+                .toList();
+
+        String destinationPrefix = "hotels/" + hotel.getId() + "/";
+        for (String retainedPath : retainedPermanentPaths) {
+            if (!retainedPath.startsWith(destinationPrefix)) {
+                throw new AccessDeniedException("Unauthorized media path: " + retainedPath);
+            }
+        }
+
+        // We temporarily save the exact mix of old permanent and new temp paths the user sent.
+        // The RabbitMQ worker will clean this up shortly.
         hotelRequestDto.setActive(hotel.getActive());
-        modelMapper.map(hotelRequestDto,hotel);
+        modelMapper.map(hotelRequestDto, hotel);
+        hotel.setPhotos(incomingPaths);
+
         Hotel savedHotel = hotelRepository.save(hotel);
-        log.info("Hotel updated with id: {}",id);
-        return modelMapper.map(savedHotel,HotelResponseDto.class);
+
+        // Publish the async event ONLY if there are new files to promote or old files to delete
+        if (!newTempPaths.isEmpty() || !photosToDelete.isEmpty()) {
+            MediaPromotionEvent event = new MediaPromotionEvent(
+                    hotel.getId(),
+                    MediaPromotionEvent.EntityType.HOTEL,
+                    currentUser().getId(),
+                    newTempPaths,
+                    retainedPermanentPaths,
+                    photosToDelete
+            );
+            mediaEventPublisher.publishPromotionEvent(event);
+        }
+
+        log.info("Hotel updated with id: {}", id);
+        return enrichWithPublicUrls(modelMapper.map(savedHotel, HotelResponseDto.class));
     }
+
 
     @Override
     @Transactional
@@ -245,6 +308,7 @@ public class HotelServiceImpl implements HotelService {
                         hotel -> {
                             HotelSearchResponseDto dto = modelMapper.map(hotel, HotelSearchResponseDto.class);
                             dto.setPricePerDay(priceMap.getOrDefault(hotel.getId(),BigDecimal.ZERO));
+                            dto.setPhotos(mediaUrlProvider.generatePublicUrls(hotel.getPhotos()));
                             return dto;
                         }
                 );
@@ -310,7 +374,7 @@ public class HotelServiceImpl implements HotelService {
 
         log.info("Hotel info retrieved successfully");
         return HotelInfoDto.builder()
-                .hotel(modelMapper.map(hotel,HotelResponseDto.class))
+                .hotel(enrichWithPublicUrls(modelMapper.map(hotel, HotelResponseDto.class)))
                 .rooms(roomResponseDtos)
                 .build();
     }
@@ -342,7 +406,7 @@ public class HotelServiceImpl implements HotelService {
         List<BestHotelWrapper> bestHotelWrapperList = hotelRepository.findBestHotels(pageable);
         log.info("Successfully fetched best hotels");
         return bestHotelWrapperList.stream()
-                .map(bestHotelWrapper -> modelMapper.map(bestHotelWrapper, HotelResponseDto.class))
+                .map(wrapper -> enrichWithPublicUrls(modelMapper.map(wrapper, HotelResponseDto.class)))
                 .toList();
     }
 
@@ -354,7 +418,7 @@ public class HotelServiceImpl implements HotelService {
         Pageable pageable = PageRequest.of(page, size, Sort.by("updatedAt").descending());
         Page<ManagersHotelWrapper> wrappers = hotelRepository.findManagersHotels(user.getId(),pageable);
         Page<HotelResponseDto> hotels = wrappers.map(
-                wrapper -> modelMapper.map(wrapper, HotelResponseDto.class));
+                wrapper -> enrichWithPublicUrls(modelMapper.map(wrapper, HotelResponseDto.class)));
         log.info("Successfully retrieved hotels for a hotel manager");
         return new PagedModel<>(hotels);
     }
@@ -471,5 +535,12 @@ public class HotelServiceImpl implements HotelService {
     private AuthenticatedUser currentUser() {
         return securityHelper.getCurrentAuthenticatedUser()
                 .orElseThrow(() -> new SessionNotFoundException("Cannot identify the authenticated user"));
+    }
+
+    private HotelResponseDto enrichWithPublicUrls(HotelResponseDto dto) {
+        if (dto != null && dto.getPhotos() != null) {
+            dto.setPhotos(mediaUrlProvider.generatePublicUrls(dto.getPhotos()));
+        }
+        return dto;
     }
 }

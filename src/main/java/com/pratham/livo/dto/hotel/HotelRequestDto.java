@@ -19,8 +19,8 @@ public class HotelRequestDto {
     @NotBlank(message = "City is required")
     private String city;
 
-    @NotNull(message = "Photos list cannot be null")
-    @Size(min = 1, max = 5, message = "Provide between 1 and 5 photos")
+    @NotNull(message = "Photos paths list cannot be null")
+    @Size(min = 1, max = 10, message = "Provide between 1 and 10 photos")
     private List<String> photos;
 
     @NotNull(message = "Amenities list cannot be null")

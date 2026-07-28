@@ -80,4 +80,7 @@ public class Hotel {
     @Builder.Default
     @Column(nullable = false)
     private Double popularityScore = 0.0;
+
+    @Version
+    private Long version;
 }

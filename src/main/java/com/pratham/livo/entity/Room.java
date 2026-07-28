@@ -77,4 +77,7 @@ public class Room {
     @UpdateTimestamp
     private LocalDateTime updatedAt;
 
+    @Version
+    private Long version;
+
 }

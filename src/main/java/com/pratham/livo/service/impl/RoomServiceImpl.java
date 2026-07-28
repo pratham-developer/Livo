@@ -9,6 +9,9 @@ import com.pratham.livo.enums.BookingStatus;
 import com.pratham.livo.exception.BadRequestException;
 import com.pratham.livo.exception.ResourceNotFoundException;
 import com.pratham.livo.exception.SessionNotFoundException;
+import com.pratham.livo.media.event.MediaEventPublisher;
+import com.pratham.livo.media.event.MediaPromotionEvent;
+import com.pratham.livo.media.util.MediaUrlProvider;
 import com.pratham.livo.repository.BookingRepository;
 import com.pratham.livo.repository.HotelRepository;
 import com.pratham.livo.repository.InventoryRepository;
@@ -22,7 +25,6 @@ import org.modelmapper.ModelMapper;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -39,34 +41,34 @@ public class RoomServiceImpl implements RoomService {
     private final InventoryRepository inventoryRepository;
     private final BookingRepository bookingRepository;
     private final SecurityHelper securityHelper;
+
+    private final MediaEventPublisher mediaEventPublisher;
+    private final MediaUrlProvider mediaUrlProvider;
+
     public static final int MAX_ROOMS_PER_HOTEL = 100;
     public static final int MAX_ROOM_CAPACITY = 6;
 
     @Override
     @Transactional
     public RoomResponseDto createNewRoomInHotel(Long hotelId, RoomRequestDto roomRequestDto) {
-        log.info("Creating room in hotel(id={}) with type: {}",hotelId, roomRequestDto.getType());
+        log.info("Creating room in hotel(id={}) with type: {}", hotelId, roomRequestDto.getType());
 
-        //check if bad capacity
         int capacity = roomRequestDto.getCapacity();
         if (capacity <= 0 || capacity > MAX_ROOM_CAPACITY) {
             throw new BadRequestException("Invalid room capacity");
         }
 
         Hotel hotel = hotelRepository.findById(hotelId).orElseThrow(
-                ()->new ResourceNotFoundException("Hotel Not Found with id: "+hotelId)
+                ()->new ResourceNotFoundException("Hotel Not Found with id: " + hotelId)
         );
 
-        //verify hotel owner
         AuthenticatedUser authenticatedUser = currentUser();
-        verifyHotelOwner(authenticatedUser,hotel);
+        verifyHotelOwner(authenticatedUser, hotel);
 
-        //cant add room to a dead hotel
         if(hotel.getDeleted()) {
             throw new BadRequestException("Cannot add room to a deleted hotel");
         }
 
-        //check if upper limit reached
         long roomCount = roomRepository.countByHotelIdAndDeletedFalse(hotelId);
         if (roomCount >= MAX_ROOMS_PER_HOTEL) {
             throw new BadRequestException("Maximum room limit reached");
@@ -77,14 +79,34 @@ public class RoomServiceImpl implements RoomService {
         room.setDeleted(false);
         room.setActive(hotel.getActive());
 
-        Room savedRoom = roomRepository.save(room);
-        log.info("Room created in hotel(id={}) with type: {}",hotelId, roomRequestDto.getType());
+        // Save temporary paths immediately
+        room.setPhotos(roomRequestDto.getPhotos());
 
-        //create inventory for this room after creation if hotel is active
+        // 1. Save to generate the Room ID
+        Room savedRoom = roomRepository.save(room);
+
+        // 2. Publish async event
+        List<String> incomingTempPaths = roomRequestDto.getPhotos() != null ? roomRequestDto.getPhotos() : List.of();
+
+        if (!incomingTempPaths.isEmpty()) {
+            MediaPromotionEvent event = new MediaPromotionEvent(
+                    savedRoom.getId(),
+                    MediaPromotionEvent.EntityType.ROOM,
+                    authenticatedUser.getId(),
+                    incomingTempPaths,
+                    List.of(),
+                    List.of()
+            );
+            mediaEventPublisher.publishPromotionEvent(event);
+        }
+
+        log.info("Room created in hotel(id={}) with type: {}", hotelId, roomRequestDto.getType());
+
         if(hotel.getActive()){
             inventoryService.initRoomFor1Year(savedRoom);
         }
-        return modelMapper.map(savedRoom, RoomResponseDto.class);
+
+        return enrichWithPublicUrls(modelMapper.map(savedRoom, RoomResponseDto.class));
     }
 
     @Override
@@ -92,16 +114,15 @@ public class RoomServiceImpl implements RoomService {
     public List<RoomResponseDto> getAllRoomsInHotel(Long hotelId) {
         log.info("Fetching all rooms for hotelId={}", hotelId);
         Hotel hotel = hotelRepository.findById(hotelId).orElseThrow(
-                ()->new ResourceNotFoundException("Hotel Not Found with id: "+hotelId)
+                ()->new ResourceNotFoundException("Hotel Not Found with id: " + hotelId)
         );
-        //verify hotel owner
         AuthenticatedUser authenticatedUser = currentUser();
         verifyHotelOwner(authenticatedUser, hotel);
         List<Room> rooms = roomRepository.findByHotelAndDeletedFalse(hotel);
         log.info("Found {} rooms for hotelId={}", rooms.size(), hotelId);
 
         return rooms.stream()
-                .map(room -> modelMapper.map(room, RoomResponseDto.class))
+                .map(room -> enrichWithPublicUrls(modelMapper.map(room, RoomResponseDto.class)))
                 .collect(Collectors.toList());
     }
 
@@ -110,11 +131,11 @@ public class RoomServiceImpl implements RoomService {
     public RoomResponseDto getRoomById(Long roomId) {
         log.info("Getting room with id: {}", roomId);
         Room room = roomRepository.findById(roomId).orElseThrow(
-                ()->new ResourceNotFoundException("Room Not Found with id: "+roomId)
+                ()->new ResourceNotFoundException("Room Not Found with id: " + roomId)
         );
         verifyRoomOwner(room);
         log.info("Retrieved room with id: {}", roomId);
-        return modelMapper.map(room, RoomResponseDto.class);
+        return enrichWithPublicUrls(modelMapper.map(room, RoomResponseDto.class));
     }
 
     @Override
@@ -122,7 +143,7 @@ public class RoomServiceImpl implements RoomService {
     public void deleteRoomById(Long roomId) {
         log.info("Soft Deleting room with id: {}", roomId);
         Room room = roomRepository.findById(roomId).orElseThrow(
-                ()->new ResourceNotFoundException("Room Not Found with id: "+roomId)
+                ()->new ResourceNotFoundException("Room Not Found with id: " + roomId)
         );
         verifyRoomOwner(room);
 
@@ -136,22 +157,19 @@ public class RoomServiceImpl implements RoomService {
 
         //delete pending bookings
         List<BookingStatus> checkList = List.of(BookingStatus.RESERVED, BookingStatus.GUESTS_ADDED, BookingStatus.PAYMENT_PENDING);
-        bookingRepository.expireBookingsForRoom(room,BookingStatus.EXPIRED,checkList);
+        bookingRepository.expireBookingsForRoom(room, BookingStatus.EXPIRED, checkList);
 
         log.info("Room with id = {} soft deleted and inventory cleared.", roomId);
     }
 
     private void verifyHotelOwner(AuthenticatedUser authenticatedUser, Hotel hotel){
-        //check if hotel belongs to the authenticated user
         if(!authenticatedUser.getId().equals(hotel.getOwner().getId())){
             throw new AccessDeniedException("Hotel does not belong to the authenticated user");
         }
     }
 
     private void verifyRoomOwner(Room room){
-        //check if hotel belongs to the authenticated user
         AuthenticatedUser authenticatedUser = currentUser();
-
         if(!authenticatedUser.getId().equals(room.getHotel().getOwner().getId())){
             throw new AccessDeniedException("Hotel does not belong to the authenticated user");
         }
@@ -160,5 +178,12 @@ public class RoomServiceImpl implements RoomService {
     private AuthenticatedUser currentUser() {
         return securityHelper.getCurrentAuthenticatedUser()
                 .orElseThrow(() -> new SessionNotFoundException("Cannot identify the authenticated user"));
+    }
+
+    private RoomResponseDto enrichWithPublicUrls(RoomResponseDto dto) {
+        if (dto != null && dto.getPhotos() != null) {
+            dto.setPhotos(mediaUrlProvider.generatePublicUrls(dto.getPhotos()));
+        }
+        return dto;
     }
 }
