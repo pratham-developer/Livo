@@ -1,6 +1,7 @@
 package com.pratham.livo.service;
 
 import com.pratham.livo.dto.hotel.*;
+import com.pratham.livo.dto.review.ReviewDto;
 import org.springframework.data.web.PagedModel;
 
 import java.time.LocalDate;
@@ -22,4 +23,6 @@ public interface HotelService {
     PagedModel<HotelBookingDto> getBookingsForHotel(Long hotelId, HotelBookingsRequestDto requestDto, Integer page, Integer size);
 
     HotelReportDto getHotelReport(Long hotelId, HotelBookingsRequestDto requestDto);
+
+    PagedModel<ReviewDto> getHotelReviews(Long hotelId, Integer page, Integer size);
 }

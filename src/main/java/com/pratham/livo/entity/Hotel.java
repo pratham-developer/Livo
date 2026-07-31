@@ -82,17 +82,12 @@ public class Hotel {
     @Column(nullable = false)
     private Double popularityScore = 0.0;
 
-    @Column(nullable = false, columnDefinition = "bigint default 0")
-    @Builder.Default
-    private Long reviewCount = 0L;
+    private Long reviewCount;
 
-    @Column(nullable = false, columnDefinition = "bigint default 0")
-    @Builder.Default
-    private Long ratingSum = 0L;
+    private Long ratingSum;
 
-    @Column(precision = 3, scale = 2, nullable = false, columnDefinition = "numeric(3,2) default 0.00")
-    @Builder.Default
-    private BigDecimal averageRating = BigDecimal.ZERO;
+    @Column(precision = 3, scale = 2)
+    private BigDecimal averageRating;
 
     @Column(columnDefinition = "TEXT")
     private String aiSummary;

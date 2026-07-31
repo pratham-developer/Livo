@@ -1,6 +1,7 @@
 package com.pratham.livo.controller;
 
 import com.pratham.livo.dto.hotel.*;
+import com.pratham.livo.dto.review.ReviewDto;
 import com.pratham.livo.service.HotelService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -44,10 +45,23 @@ public class HotelBrowseController {
         return ResponseEntity.ok(hotelService.getHotelInfo(hotelId,startDate,endDate,roomsCount));
     }
 
+
+    //most popular hotels
     @GetMapping("/best")
     public ResponseEntity<List<HotelResponseDto>> getBestHotels(
     ){
         log.info("Attempting to fetch best hotels");
         return ResponseEntity.ok(hotelService.getBestHotels());
+    }
+
+    @GetMapping("/{hotelId}/reviews")
+    public ResponseEntity<PagedModel<ReviewDto>> getHotelReviews(
+            @PathVariable Long hotelId,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "10") Integer size
+    ) {
+        log.info("Attempting to get reviews for hotel id: {}", hotelId);
+        // Cap the max size at 50 to prevent frontend from requesting massive payloads
+        return ResponseEntity.ok(hotelService.getHotelReviews(hotelId, page, Math.min(size, 50)));
     }
 }
