@@ -48,7 +48,7 @@ public interface InventoryRepository extends JpaRepository<Inventory,Long> {
             SELECT DISTINCT i.hotel FROM Inventory i
             WHERE
             i.hotel.active = true AND i.hotel.deleted = false AND
-            i.city = :city AND
+            function('similarity', i.city, :city) > 0.2 AND
             i.date BETWEEN :start_date AND :end_date AND
             i.closed = false AND
             (i.totalCount-i.bookedCount-i.reservedCount) >= :rooms_count

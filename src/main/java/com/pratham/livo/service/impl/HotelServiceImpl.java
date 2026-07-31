@@ -261,10 +261,16 @@ public class HotelServiceImpl implements HotelService {
         //date validation
         long days = dateValidator.countDays(hotelSearchRequestDto.getStartDate(),hotelSearchRequestDto.getEndDate());
 
+        String searchCity = hotelSearchRequestDto.getCity() != null ? hotelSearchRequestDto.getCity().trim() : "";
+
+        if (searchCity.isEmpty()) {
+            throw new IllegalArgumentException("Search city cannot be empty.");
+        }
+
         //get the page for available hotels
         Pageable pageable = PageRequest.of(page,size);
         Page<Hotel> hotelPage = inventoryRepository.findAvailableHotels(
-                hotelSearchRequestDto.getCity(),
+                searchCity,
                 hotelSearchRequestDto.getStartDate(),
                 hotelSearchRequestDto.getEndDate(),
                 hotelSearchRequestDto.getRoomsCount(),
