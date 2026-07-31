@@ -3,6 +3,8 @@ package com.pratham.livo.service.impl;
 import com.pratham.livo.dto.auth.AuthenticatedUser;
 import com.pratham.livo.dto.booking.*;
 import com.pratham.livo.dto.message.RefundMessage;
+import com.pratham.livo.dto.review.ReviewDto;
+import com.pratham.livo.dto.review.ReviewRequestDto;
 import com.pratham.livo.entity.*;
 import com.pratham.livo.enums.BookingStatus;
 import com.pratham.livo.enums.PaymentStatus;
@@ -63,6 +65,7 @@ public class BookingServiceImpl implements BookingService {
     private final PaymentRepository paymentRepository;
     private final MessagePublisher messagePublisher;
     private final RefundRepository refundRepository;
+    private final ReviewRepository reviewRepository;
 
     @Override
     @Transactional
@@ -331,6 +334,11 @@ public class BookingServiceImpl implements BookingService {
             throw new BadRequestException("Booking is not in confirmed state");
         }
 
+        LocalDate today = LocalDate.now();
+        if (!today.isBefore(booking.getStartDate())) {
+            throw new BadRequestException("Cannot cancel a booking on or after the check-in date.");
+        }
+
         //get payment for booking
         Payment payment = paymentRepository.findByBooking(booking).orElseThrow(
                 ()->new ResourceNotFoundException("Payment not found for booking with id: "+bookingId)
@@ -410,8 +418,58 @@ public class BookingServiceImpl implements BookingService {
         if(booking.getBookingStatus().equals(BookingStatus.CANCELLED)){
             responseDto.setRefundStatus(refundRepository.findRefundStatus(bookingId,BookingStatus.CANCELLED));
         }
+        reviewRepository.findByBookingId(bookingId).ifPresent(review ->
+                responseDto.setReview(modelMapper.map(review, ReviewDto.class))
+        );
         log.info("Successfully fetched booking with id: {}",bookingId);
         return responseDto;
+    }
+
+    @Override
+    @Transactional
+    public void addReview(ReviewRequestDto reviewRequestDto) {
+        log.info("Attempting to add review to booking with id: {}", reviewRequestDto.getBookingId());
+
+        // 1. Check if booking exists
+        Booking booking = bookingRepository.findById(reviewRequestDto.getBookingId()).orElseThrow(
+                ()->new ResourceNotFoundException("Booking not found with id: "+reviewRequestDto.getBookingId())
+        );
+
+        // 2. Verify Ownership
+        verifyBookingOwner(booking);
+
+        // 3. Ensure booking is confirmed (A canceled/expired booking cannot be reviewed)
+        if(booking.getBookingStatus() != BookingStatus.CONFIRMED){
+            throw new BadRequestException("Only confirmed and completed bookings can be reviewed.");
+        }
+
+        // 4. Temporal Check: Ensure the user has actually checked out
+        // If endDate is the last night (e.g., 13th), checkout is the 14th.
+        LocalDate today = LocalDate.now();
+        LocalDate checkOutDate = booking.getEndDate().plusDays(1);
+
+        if (today.isBefore(checkOutDate)) {
+            throw new BadRequestException(
+                    "You can only review a stay after checking out. Your check-out date is: " + checkOutDate
+            );
+        }
+
+        // 5. Idempotency Check: Ensure they haven't already reviewed this booking
+        if (reviewRepository.existsByBookingId(booking.getId())) {
+            throw new BadRequestException("A review has already been submitted for this booking.");
+        }
+
+        // 6. Build and Save the Review
+        Review review = Review.builder()
+                .hotel(booking.getHotel())
+                .booking(booking)
+                .rating(reviewRequestDto.getRating())
+                .text(reviewRequestDto.getText())
+                .processed(false) // Will be picked up by the Nightly Cron Job
+                .build();
+
+        Review savedReview = reviewRepository.save(review);
+        log.info("Successfully created review ID: {} for hotel ID: {}", savedReview.getId(), booking.getHotel().getId());
     }
 
     private AuthenticatedUser currentUser() {

@@ -1,6 +1,7 @@
 package com.pratham.livo.dto.booking;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.pratham.livo.dto.review.ReviewDto;
 import com.pratham.livo.enums.BookingStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -34,4 +35,5 @@ public class BookingResponseDto {
     private BookingStatus bookingStatus;
     private Set<GetGuestDto> guests;
     private String refundStatus;
+    private ReviewDto review;
 }

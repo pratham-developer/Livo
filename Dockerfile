@@ -12,7 +12,7 @@ COPY --from=build /app/target/*.jar app.jar
 
 ENV PORT=8080
 EXPOSE 8080
-ENV JAVA_OPTS="-Xmx768m -Xms384m -XX:+UseG1GC"
+ENV JAVA_OPTS="-Xmx768m -Xms384m -XX:+UseG1GC -Duser.timezone=Asia/Kolkata"
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
   CMD curl -f http://localhost:${PORT}/api/v1/actuator/health || exit 1
