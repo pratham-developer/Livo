@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.math.BigDecimal;
 import java.util.List;
 
 @Data
@@ -19,4 +21,6 @@ public class HotelResponseDto {
     private HotelContactInfoDto contactInfo;
     private Boolean active;
     private Boolean deleted;
+    private BigDecimal averageRating;
+    private String aiSummary;
 }

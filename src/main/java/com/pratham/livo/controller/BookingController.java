@@ -1,6 +1,7 @@
 package com.pratham.livo.controller;
 
 import com.pratham.livo.dto.booking.*;
+import com.pratham.livo.dto.review.ReviewRequestDto;
 import com.pratham.livo.service.BookingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +12,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/bookings")
@@ -56,5 +58,16 @@ public class BookingController {
             @PathVariable Long bookingId){
         log.info("Attempting to get booking with id: {}",bookingId);
         return ResponseEntity.ok(bookingService.getBookingById(bookingId));
+    }
+
+    @PostMapping("/review")
+    public ResponseEntity<Map<String, String>> addReview(
+            @Valid @RequestBody ReviewRequestDto reviewRequestDto) {
+        log.info("Attempting to add review to booking with id: {}",
+                reviewRequestDto.getBookingId());
+        bookingService.addReview(reviewRequestDto);
+        return ResponseEntity.ok(
+                Map.of("message", "Review added successfully")
+        );
     }
 }

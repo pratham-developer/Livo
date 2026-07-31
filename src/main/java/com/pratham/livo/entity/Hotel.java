@@ -5,6 +5,7 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -80,6 +81,18 @@ public class Hotel {
     @Builder.Default
     @Column(nullable = false)
     private Double popularityScore = 0.0;
+
+    private Long reviewCount;
+
+    private Long ratingSum;
+
+    @Column(precision = 3, scale = 2)
+    private BigDecimal averageRating;
+
+    @Column(columnDefinition = "TEXT")
+    private String aiSummary;
+
+    private LocalDateTime lastSummaryUpdatedAt;
 
     @Version
     private Long version;

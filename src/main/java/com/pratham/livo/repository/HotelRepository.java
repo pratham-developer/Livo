@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
@@ -50,4 +51,15 @@ public interface HotelRepository extends JpaRepository<Hotel,Long> {
             @Param("userId") Long userId, Pageable pageable);
 
     boolean existsByIdAndOwnerId(Long id, Long ownerId);
+
+    @Query("""
+        SELECT h.id FROM Hotel h
+        WHERE h.reviewCount > 0
+          AND h.id > :lastId
+          AND (h.lastSummaryUpdatedAt IS NULL OR h.lastSummaryUpdatedAt < :threshold)
+        ORDER BY h.id ASC
+    """)
+    List<Long> findHotelIdsNeedingSummaryUpdate(@Param("threshold") LocalDateTime threshold,
+                                                @Param("lastId") Long lastId,
+                                                Pageable pageable);
 }

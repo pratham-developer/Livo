@@ -2,6 +2,7 @@ package com.pratham.livo.service.impl;
 
 import com.pratham.livo.dto.auth.AuthenticatedUser;
 import com.pratham.livo.dto.hotel.*;
+import com.pratham.livo.dto.review.ReviewDto;
 import com.pratham.livo.dto.room.RoomResponseDto;
 import com.pratham.livo.entity.Hotel;
 import com.pratham.livo.entity.Room;
@@ -61,6 +62,7 @@ public class HotelServiceImpl implements HotelService {
     private final RefundRepository refundRepository;
     private final MediaEventPublisher mediaEventPublisher;
     private final MediaUrlProvider mediaUrlProvider;
+    private final ReviewRepository reviewRepository;
 
     @Value("${count.best.hotels}")
     private int COUNT_BEST_HOTELS;
@@ -259,10 +261,16 @@ public class HotelServiceImpl implements HotelService {
         //date validation
         long days = dateValidator.countDays(hotelSearchRequestDto.getStartDate(),hotelSearchRequestDto.getEndDate());
 
+        String searchCity = hotelSearchRequestDto.getCity() != null ? hotelSearchRequestDto.getCity().trim() : "";
+
+        if (searchCity.isEmpty()) {
+            throw new IllegalArgumentException("Search city cannot be empty.");
+        }
+
         //get the page for available hotels
         Pageable pageable = PageRequest.of(page,size);
         Page<Hotel> hotelPage = inventoryRepository.findAvailableHotels(
-                hotelSearchRequestDto.getCity(),
+                searchCity,
                 hotelSearchRequestDto.getStartDate(),
                 hotelSearchRequestDto.getEndDate(),
                 hotelSearchRequestDto.getRoomsCount(),
@@ -521,6 +529,29 @@ public class HotelServiceImpl implements HotelService {
                 .totalRefundsProcessed(totalRefunds)
                 .cancellationRate(cancellationRate)
                 .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PagedModel<ReviewDto> getHotelReviews(Long hotelId, Integer page, Integer size) {
+        log.info("Fetching reviews for hotel ID: {}", hotelId);
+
+        // Sort by newest reviews first
+        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+
+        // The repository now directly returns the exact wrapper we need
+        Page<ReviewWrapper> wrapperPage = reviewRepository.findByHotelIdWithUser(hotelId, pageable);
+
+        // Map the projection to the required DTO
+        Page<ReviewDto> dtoPage = wrapperPage.map(wrapper ->
+                ReviewDto.builder()
+                        .rating(wrapper.getRating())
+                        .text(wrapper.getText())
+                        .reviewerName(wrapper.getReviewerName())
+                        .build()
+        );
+
+        return new PagedModel<>(dtoPage);
     }
 
     private void verifyHotelOwner(Hotel hotel){
